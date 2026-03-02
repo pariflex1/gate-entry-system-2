@@ -6,6 +6,9 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
+    "build:admin": "cd admin && npm install && npm run build",
+    "build:client": "cd client && npm install && npm run build",
+    "build": "npm run build:admin && npm run build:client",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
