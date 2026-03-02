@@ -8,7 +8,7 @@
     "dev": "node --watch server/index.js",
     "build:admin": "cd admin && npm install && npm run build",
     "build:client": "cd client && npm install && npm run build",
-    "build": "npm run build:admin && npm run build:client",
+    "build": "npm run build:admin && npm run build:client && powershell -Command \"New-Item -ItemType Directory -Force -Path 'dist\\admin', 'dist\\client'; Copy-Item -Path 'admin\\dist\\*' -Destination 'dist\\admin' -Recurse -Force; Copy-Item -Path 'client\\dist\\*' -Destination 'dist\\client' -Recurse -Force; Copy-Item -Path 'index.html' -Destination 'dist\\index.html' -Force\"",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
