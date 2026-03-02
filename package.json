@@ -1,0 +1,28 @@
+{
+  "name": "gate-entry-system-2",
+  "version": "1.0.0",
+  "description": "Gate Entry & Visitor Management System — Multi-Tenant SaaS",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@insforge/sdk": "^1.1.6-dev.0",
+    "axios": "^1.13.6",
+    "bcrypt": "^6.0.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.3",
+    "multer": "^2.1.0",
+    "nodemailer": "^8.0.1",
+    "sharp": "^0.34.5"
+  }
+}

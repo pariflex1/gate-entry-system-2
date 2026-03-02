@@ -1,0 +1,111 @@
+import { useState, useEffect } from 'react';
+import api from '../services/api';
+import { format } from 'date-fns';
+
+export default function Logs() {
+    const [tab, setTab] = useState('entries');
+    const [entries, setEntries] = useState([]);
+    const [activities, setActivities] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [page, setPage] = useState(1);
+    const [total, setTotal] = useState(0);
+    const limit = 30;
+
+    const fetchEntries = async (p = 1) => {
+        setLoading(true);
+        try {
+            const res = await api.get(`/admin/logs/entries?page=${p}&limit=${limit}`);
+            setEntries(res.data.entries || []);
+            setTotal(res.data.total || 0);
+            setPage(p);
+        } catch { } finally { setLoading(false); }
+    };
+
+    const fetchActivity = async (p = 1) => {
+        setLoading(true);
+        try {
+            const res = await api.get(`/admin/logs/activity?page=${p}&limit=${limit}`);
+            setActivities(res.data.activities || []);
+            setTotal(res.data.total || 0);
+            setPage(p);
+        } catch { } finally { setLoading(false); }
+    };
+
+    useEffect(() => {
+        if (tab === 'entries') fetchEntries(1);
+        else fetchActivity(1);
+    }, [tab]);
+
+    const totalPages = Math.ceil(total / limit);
+
+    return (
+        <div>
+            <div className="page-header">
+                <h1 className="page-title">Logs</h1>
+            </div>
+
+            {/* Tab switch */}
+            <div style={{ display: 'flex', gap: 4, marginBottom: 20, background: 'var(--bg-card)', borderRadius: 8, padding: 4, width: 'fit-content' }}>
+                <button className={`btn btn-sm ${tab === 'entries' ? 'btn-primary' : 'btn-outline'}`} style={{ border: 'none' }}
+                    onClick={() => setTab('entries')}>Gate Entries</button>
+                <button className={`btn btn-sm ${tab === 'activity' ? 'btn-primary' : 'btn-outline'}`} style={{ border: 'none' }}
+                    onClick={() => setTab('activity')}>Guard Activity</button>
+            </div>
+
+            {loading ? (
+                <div style={{ textAlign: 'center', padding: 40 }}><span className="spinner" style={{ width: 28, height: 28 }} /></div>
+            ) : tab === 'entries' ? (
+                <div className="table-wrap">
+                    <table className="data-table">
+                        <thead>
+                            <tr><th>Time</th><th>Person</th><th>Mobile</th><th>Unit</th><th>Type</th><th>Guard</th></tr>
+                        </thead>
+                        <tbody>
+                            {entries.length === 0 ? (
+                                <tr><td colSpan="6" style={{ textAlign: 'center', padding: 32, color: 'var(--text-muted)' }}>No entries</td></tr>
+                            ) : entries.map(e => (
+                                <tr key={e.id}>
+                                    <td style={{ fontSize: '0.85rem', color: 'var(--text-dim)' }}>{format(new Date(e.entry_time), 'dd/MM hh:mm a')}</td>
+                                    <td style={{ fontWeight: 600 }}>{e.person_name}</td>
+                                    <td>{e.person_mobile}</td>
+                                    <td>{e.unit || '—'}</td>
+                                    <td><span className={`badge ${e.entry_type === 'IN' ? 'badge-in' : 'badge-out'}`}>{e.entry_type}</span></td>
+                                    <td style={{ color: 'var(--text-dim)' }}>{e.guard_name}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            ) : (
+                <div className="table-wrap">
+                    <table className="data-table">
+                        <thead>
+                            <tr><th>Time</th><th>Guard</th><th>Action</th><th>Detail</th></tr>
+                        </thead>
+                        <tbody>
+                            {activities.length === 0 ? (
+                                <tr><td colSpan="4" style={{ textAlign: 'center', padding: 32, color: 'var(--text-muted)' }}>No activity</td></tr>
+                            ) : activities.map(a => (
+                                <tr key={a.id}>
+                                    <td style={{ fontSize: '0.85rem', color: 'var(--text-dim)' }}>{format(new Date(a.created_at), 'dd/MM hh:mm a')}</td>
+                                    <td style={{ fontWeight: 600 }}>{a.guard_name}</td>
+                                    <td><span className="badge badge-active">{a.action}</span></td>
+                                    <td style={{ color: 'var(--text-dim)', maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.detail || '—'}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+                <div className="pagination">
+                    <button className="btn btn-outline btn-sm" onClick={() => tab === 'entries' ? fetchEntries(page - 1) : fetchActivity(page - 1)} disabled={page <= 1}>← Prev</button>
+                    <span style={{ padding: '6px 12px', color: 'var(--text-dim)', fontSize: '0.85rem' }}>Page {page} of {totalPages}</span>
+                    <button className="btn btn-outline btn-sm" onClick={() => tab === 'entries' ? fetchEntries(page + 1) : fetchActivity(page + 1)} disabled={page >= totalPages}>Next →</button>
+                </div>
+            )}
+        </div>
+    );
+}
