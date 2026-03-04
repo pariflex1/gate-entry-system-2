@@ -2,7 +2,7 @@ const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const insforge = require('../services/insforge');
-const { sendVerificationEmail, sendApprovalRequest, sendPasswordResetEmail } = require('../services/email');
+const { sendPasswordResetEmail, sendApprovalRequest, sendAdminSignupNotification } = require('../services/email');
 const { notifySuperAdmin } = require('../services/whatsapp');
 
 const router = express.Router();
@@ -26,7 +26,7 @@ router.post('/guard-login', async (req, res) => {
         // Find society by slug
         const { data: society, error: socErr } = await insforge.database
             .from('societies')
-            .select('id, status')
+            .select('id, status, admin_id')
             .eq('slug', society_slug)
             .single();
 
@@ -36,12 +36,22 @@ router.post('/guard-login', async (req, res) => {
         if (society.status === 'suspended') {
             return res.status(403).json({ error: 'This society has been suspended' });
         }
-        if (society.status !== 'active') {
-            return res.status(403).json({ error: 'This society is not active yet' });
+
+        // Check society owner (admin) status
+        const { data: admin } = await insforge.database
+            .from('users')
+            .select('status')
+            .eq('id', society.admin_id)
+            .single();
+
+        if (!admin || admin.status !== 'active') {
+            return res.status(403).json({ error: 'The society administrator is not active' });
         }
 
+        const society_id = society.id;
+
         // Check lockout
-        const lockoutKey = `${society.id}:${mobile}`;
+        const lockoutKey = `${society_id}:${mobile}`;
         const lockout = guardLockouts[lockoutKey];
         if (lockout && lockout.lockedUntil && Date.now() < lockout.lockedUntil) {
             const remainingSec = Math.ceil((lockout.lockedUntil - Date.now()) / 1000);
@@ -55,12 +65,11 @@ router.post('/guard-login', async (req, res) => {
         const { data: guard, error: guardErr } = await insforge.database
             .from('guards')
             .select('id, name, mobile, pin_hash, active')
-            .eq('society_id', society.id)
+            .eq('society_id', society_id)
             .eq('mobile', mobile)
             .single();
 
         if (guardErr || !guard) {
-            // Increment lockout counter
             if (!guardLockouts[lockoutKey]) guardLockouts[lockoutKey] = { attempts: 0, lockedUntil: null };
             guardLockouts[lockoutKey].attempts += 1;
             if (guardLockouts[lockoutKey].attempts >= LOCKOUT_ATTEMPTS) {
@@ -89,14 +98,14 @@ router.post('/guard-login', async (req, res) => {
 
         // Issue JWT
         const token = jwt.sign(
-            { role: 'guard', guard_id: guard.id, society_id: society.id },
+            { role: 'guard', guard_id: guard.id, society_id },
             process.env.JWT_SECRET,
             { expiresIn: '12h' }
         );
 
         // Log guard activity
         await insforge.database.from('guard_activity').insert({
-            society_id: society.id,
+            society_id,
             guard_id: guard.id,
             action: 'LOGIN',
             detail: `Guard ${guard.name} logged in`,
@@ -104,8 +113,8 @@ router.post('/guard-login', async (req, res) => {
 
         return res.json({
             token,
-            guard: { id: guard.id, name: guard.name, mobile: guard.mobile },
-            society_id: society.id,
+            guard: { id: guard.id, name: guard.name, mobile: guard.mobile, society_slug },
+            society_id,
         });
     } catch (error) {
         console.error('Guard login error:', error);
@@ -114,61 +123,139 @@ router.post('/guard-login', async (req, res) => {
 });
 
 /**
+ * GET /api/auth/my-societies
+ * Get all societies where this guard's mobile is registered
+ */
+router.get('/my-societies', async (req, res) => {
+    try {
+        const authHeader = req.headers.authorization;
+        if (!authHeader) return res.status(401).json({ error: 'Authorized access only' });
+        const token = authHeader.split(' ')[1];
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+        if (decoded.role !== 'guard') return res.status(403).json({ error: 'Forbidden' });
+
+        // Get guard's mobile
+        const { data: guard } = await insforge.database
+            .from('guards')
+            .select('mobile')
+            .eq('id', decoded.guard_id)
+            .single();
+
+        if (!guard) return res.status(404).json({ error: 'Guard not found' });
+
+        // Find all records for this mobile
+        const { data: guards } = await insforge.database
+            .from('guards')
+            .select('society_id')
+            .eq('mobile', guard.mobile);
+
+        const societyIds = (guards || []).map(g => g.society_id);
+
+        if (societyIds.length === 0) return res.json([]);
+
+        // Fetch societies
+        const { data: societies } = await insforge.database
+            .from('societies')
+            .select('id, name, slug')
+            .in('id', societyIds);
+
+        return res.json(societies || []);
+    } catch (error) {
+        console.error('My societies error:', error);
+        return res.status(401).json({ error: 'Session expired' });
+    }
+});
+
+/**
  * POST /api/auth/admin-register
- * Body: { society_name, society_address, name, email, password, mobile }
+ * Body: { email, password, name, mobile, society_name, society_address }
+ * Uses InsForge auth.signUp for email/password, creates a users row + society row.
  */
 router.post('/admin-register', async (req, res) => {
     try {
-        const { society_name, society_address, name, email, password, mobile } = req.body;
+        const { email, password, name, mobile, society_name, society_address } = req.body;
 
-        if (!society_name || !name || !email || !password || !mobile) {
-            return res.status(400).json({ error: 'society_name, name, email, password, and mobile are required' });
+        if (!email || !password || !name || !mobile || !society_name) {
+            return res.status(400).json({ error: 'All fields (email, password, name, mobile, society_name) are required' });
         }
         if (password.length < 8) {
             return res.status(400).json({ error: 'Password must be at least 8 characters' });
         }
-        if (!/\d/.test(password)) {
-            return res.status(400).json({ error: 'Password must contain at least one number' });
-        }
-        if (!/^\d{10}$/.test(mobile)) {
-            return res.status(400).json({ error: 'Mobile must be a 10-digit number' });
+        if (society_name.length < 3) {
+            return res.status(400).json({ error: 'Society name must be at least 3 characters' });
         }
 
-        // Check email uniqueness
-        const { data: existingAdmin } = await insforge.database
-            .from('society_admins')
+        // Check email uniqueness in users table
+        const { data: existingUser } = await insforge.database
+            .from('users')
             .select('id')
             .eq('email', email.toLowerCase())
             .maybeSingle();
 
-        if (existingAdmin) {
+        if (existingUser) {
             return res.status(409).json({ error: 'Email already registered' });
         }
 
         // Generate slug from society name
         const slug = society_name
             .toLowerCase()
-            .replace(/[^a-z0-9]+/g, '-')
-            .replace(/^-|-$/g, '');
+            .replace(/[^a-z0-9\s-]/g, '')
+            .replace(/\s+/g, '-')
+            .replace(/-+/g, '-')
+            .trim();
 
         // Check slug uniqueness
-        const { data: existingSociety } = await insforge.database
+        const { data: existingSlug } = await insforge.database
             .from('societies')
             .select('id')
             .eq('slug', slug)
             .maybeSingle();
 
-        if (existingSociety) {
-            return res.status(409).json({ error: 'A society with a similar name already exists. Please choose a different name.' });
+        if (existingSlug) {
+            return res.status(409).json({ error: `Society slug "${slug}" already taken. Choose a different name.` });
         }
 
-        // Insert society
+        // 1. Create auth user via InsForge signUp (email & password)
+        const { data: authData, error: authErr } = await insforge.auth.signUp({
+            email: email.toLowerCase(),
+            password,
+            name,
+        });
+
+        if (authErr) {
+            console.error('InsForge signUp error:', authErr);
+            return res.status(500).json({ error: authErr.message || 'Failed to create auth account' });
+        }
+
+        const authUserId = authData?.user?.id || null;
+
+        // 2. Insert into users table with pending status
+        const { data: user, error: userErr } = await insforge.database
+            .from('users')
+            .insert({
+                email: email.toLowerCase(),
+                auth_user_id: authUserId,
+                name,
+                mobile,
+                status: 'pending',
+            })
+            .select()
+            .single();
+
+        if (userErr) {
+            console.error('Users table insert error:', userErr);
+            return res.status(500).json({ error: 'Failed to create account' });
+        }
+
+        // 3. Create society with pending status, linked to user
         const { data: society, error: socErr } = await insforge.database
             .from('societies')
             .insert({
                 name: society_name,
                 slug,
                 address: society_address || null,
+                admin_id: user.id,
                 status: 'pending',
             })
             .select()
@@ -176,93 +263,22 @@ router.post('/admin-register', async (req, res) => {
 
         if (socErr) {
             console.error('Society insert error:', socErr);
-            return res.status(500).json({ error: 'Failed to create society' });
+            // Still return success — user was created, society can be created later
         }
 
-        // Hash password
-        const password_hash = await bcrypt.hash(password, 12);
+        // 4. Notify super admin via email
+        await sendApprovalRequest(society_name, name, email, mobile);
 
-        // Insert admin
-        const { data: admin, error: adminErr } = await insforge.database
-            .from('society_admins')
-            .insert({
-                society_id: society.id,
-                name,
-                email: email.toLowerCase(),
-                password_hash,
-                mobile,
-                email_verified: false,
-                status: 'pending',
-            })
-            .select()
-            .single();
-
-        if (adminErr) {
-            console.error('Admin insert error:', adminErr);
-            // Clean up: delete the society we just created
-            await insforge.database.from('societies').delete().eq('id', society.id);
-            return res.status(500).json({ error: 'Failed to create admin account' });
-        }
-
-        // Send email verification link
-        const verifyToken = jwt.sign(
-            { email: email.toLowerCase(), admin_id: admin.id, type: 'email_verify' },
-            process.env.JWT_SECRET,
-            { expiresIn: '24h' }
-        );
-        await sendVerificationEmail(email.toLowerCase(), name, verifyToken);
+        // 5. Notify super admin via WhatsApp
+        await notifySuperAdmin(society_name, name, email, mobile);
 
         return res.status(201).json({
-            message: 'Registration successful! Check your email to verify your address.',
-            society: { id: society.id, name: society.name, slug },
+            message: 'Registration successful! Your account is pending activation by the super admin.',
+            user: { id: user.id, email: user.email },
+            society: society ? { id: society.id, slug: society.slug } : null,
         });
     } catch (error) {
         console.error('Admin register error:', error);
-        return res.status(500).json({ error: 'Internal server error' });
-    }
-});
-
-/**
- * GET /api/auth/verify-email?token=xxx
- */
-router.get('/verify-email', async (req, res) => {
-    try {
-        const { token } = req.query;
-        if (!token) {
-            return res.status(400).json({ error: 'Token is required' });
-        }
-
-        let decoded;
-        try {
-            decoded = jwt.verify(token, process.env.JWT_SECRET);
-        } catch (e) {
-            return res.status(400).json({ error: 'Invalid or expired verification link. Please request a new one.' });
-        }
-
-        if (decoded.type !== 'email_verify') {
-            return res.status(400).json({ error: 'Invalid token type' });
-        }
-
-        // Set email_verified = true
-        const { data: admin, error } = await insforge.database
-            .from('society_admins')
-            .update({ email_verified: true })
-            .eq('id', decoded.admin_id)
-            .select('*, societies:society_id(name)')
-            .single();
-
-        if (error || !admin) {
-            return res.status(400).json({ error: 'Failed to verify email' });
-        }
-
-        // Notify super admin
-        const societyName = admin.societies?.name || 'Unknown';
-        await sendApprovalRequest(societyName, admin.name, admin.email, admin.mobile);
-        await notifySuperAdmin(societyName, admin.name, admin.email, admin.mobile);
-
-        return res.json({ message: 'Email verified successfully! Your account is now awaiting super admin approval.' });
-    } catch (error) {
-        console.error('Verify email error:', error);
         return res.status(500).json({ error: 'Internal server error' });
     }
 });
@@ -279,8 +295,8 @@ router.post('/admin-login', async (req, res) => {
         }
 
         const { data: admin, error } = await insforge.database
-            .from('society_admins')
-            .select('id, society_id, name, email, password_hash, email_verified, status, mobile')
+            .from('users')
+            .select('id, name, email, password_hash, status, mobile')
             .eq('email', email.toLowerCase())
             .single();
 
@@ -288,30 +304,14 @@ router.post('/admin-login', async (req, res) => {
             return res.status(401).json({ error: 'Invalid email or password' });
         }
 
-        // Check email verified
-        if (!admin.email_verified) {
-            return res.status(403).json({ error: 'Please verify your email address first' });
-        }
-
-        // Check status
+        // Check status — only active users can login
         switch (admin.status) {
             case 'pending':
-                return res.status(403).json({ error: 'Your account is awaiting approval' });
+                return res.status(403).json({ error: 'Your account is awaiting activation. Please contact the administrator.' });
             case 'rejected':
                 return res.status(403).json({ error: 'Your registration was rejected' });
             case 'suspended':
                 return res.status(403).json({ error: 'Your account has been suspended' });
-        }
-
-        // Check society status too
-        const { data: society } = await insforge.database
-            .from('societies')
-            .select('status')
-            .eq('id', admin.society_id)
-            .single();
-
-        if (society && society.status === 'suspended') {
-            return res.status(403).json({ error: 'Your society has been suspended. Contact support.' });
         }
 
         // Verify password
@@ -322,7 +322,7 @@ router.post('/admin-login', async (req, res) => {
 
         // Issue JWT
         const token = jwt.sign(
-            { role: 'admin', admin_id: admin.id, society_id: admin.society_id },
+            { role: 'admin', admin_id: admin.id },
             process.env.JWT_SECRET,
             { expiresIn: '8h' }
         );
@@ -330,7 +330,6 @@ router.post('/admin-login', async (req, res) => {
         return res.json({
             token,
             admin: { id: admin.id, name: admin.name, email: admin.email, mobile: admin.mobile },
-            society_id: admin.society_id,
         });
     } catch (error) {
         console.error('Admin login error:', error);
@@ -348,7 +347,7 @@ router.post('/forgot-password', async (req, res) => {
         if (!email) return res.status(400).json({ error: 'Email is required' });
 
         const { data: admin } = await insforge.database
-            .from('society_admins')
+            .from('users')
             .select('id, name, email')
             .eq('email', email.toLowerCase())
             .maybeSingle();
@@ -399,7 +398,7 @@ router.post('/reset-password', async (req, res) => {
 
         const password_hash = await bcrypt.hash(password, 12);
         const { error } = await insforge.database
-            .from('society_admins')
+            .from('users')
             .update({ password_hash })
             .eq('id', decoded.admin_id);
 

@@ -3,6 +3,7 @@ import api from '../services/api';
 
 export default function VehicleDropdown({ personId, vehicles, societyId, onSelect, onVehiclesUpdate }) {
     const [showAddNew, setShowAddNew] = useState(false);
+    const [selectedId, setSelectedId] = useState('');
     const [newNumber, setNewNumber] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
@@ -50,30 +51,66 @@ export default function VehicleDropdown({ personId, vehicles, societyId, onSelec
     return (
         <div>
             <label className="input-label">Vehicle</label>
-            <select
-                className="input-field"
-                onChange={(e) => {
-                    if (e.target.value === 'add_new') {
-                        setShowAddNew(true);
-                        onSelect(null);
-                    } else if (e.target.value === '') {
-                        onSelect(null);
-                    } else {
-                        const v = vehicles.find((v) => v.id === e.target.value);
-                        onSelect(v);
-                        setShowAddNew(false);
-                    }
-                }}
-                defaultValue=""
-            >
-                <option value="">No vehicle</option>
-                {vehicles.map((v) => (
-                    <option key={v.id} value={v.id}>
-                        {v.vehicle_number}
-                    </option>
-                ))}
-                <option value="add_new">➕ Add New Vehicle</option>
-            </select>
+            <div style={{ position: 'relative' }}>
+                <div
+                    className="input-field"
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', paddingRight: '16px' }}
+                    onClick={() => {
+                        const nextSelect = selectedId === 'add_new' ? '' : 'add_new';
+                        setSelectedId(nextSelect);
+                        if (nextSelect === 'add_new') {
+                            setShowAddNew(true);
+                            onSelect(null);
+                        }
+                    }}
+                >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        {selectedId === '' && 'No vehicle'}
+                        {selectedId === 'add_new' && '➕ Add New Vehicle'}
+                        {selectedId && selectedId !== 'add_new' && (() => {
+                            const v = vehicles.find(v => v.id === selectedId);
+                            if (!v) return 'No vehicle';
+                            return (
+                                <>
+                                    {v.vehicle_photo_url && (
+                                        <img src={v.vehicle_photo_url} alt="vehicle" style={{ width: 24, height: 24, borderRadius: 4, objectFit: 'cover' }} />
+                                    )}
+                                    <span>{v.vehicle_number}</span>
+                                </>
+                            );
+                        })()}
+                    </div>
+                </div>
+
+                {/* Custom Options Container, using select element implicitly as fallback for UI behavior */}
+                <select
+                    className="input-field"
+                    style={{ position: 'absolute', top: 0, left: 0, opacity: 0, height: '100%', cursor: 'pointer' }}
+                    value={selectedId}
+                    onChange={(e) => {
+                        setSelectedId(e.target.value);
+                        if (e.target.value === 'add_new') {
+                            setShowAddNew(true);
+                            onSelect(null);
+                        } else if (e.target.value === '') {
+                            onSelect(null);
+                            setShowAddNew(false);
+                        } else {
+                            const v = vehicles.find((v) => v.id === e.target.value);
+                            onSelect(v);
+                            setShowAddNew(false);
+                        }
+                    }}
+                >
+                    <option value="">No vehicle</option>
+                    {vehicles.map((v) => (
+                        <option key={v.id} value={v.id}>
+                            {v.vehicle_number}
+                        </option>
+                    ))}
+                    <option value="add_new">➕ Add New Vehicle</option>
+                </select>
+            </div>
 
             {showAddNew && (
                 <div style={{ marginTop: 10, display: 'flex', gap: 8, alignItems: 'flex-start', flexWrap: 'wrap' }}>

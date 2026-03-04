@@ -5,6 +5,7 @@ import Entry from './guard/Entry';
 import CurrentlyInside from './guard/CurrentlyInside';
 import History from './guard/History';
 import AssignQR from './guard/AssignQR';
+import SocietySwitcher from './guard/SocietySwitcher';
 import OfflineBanner from './shared/OfflineBanner';
 import ToastContainer from './shared/ToastContainer';
 import { useToast } from './hooks/useUtils';
@@ -44,13 +45,22 @@ function NavBar() {
         </svg>
         History
       </NavLink>
+      <NavLink to="/switch-society" className={`nav-item ${location.pathname === '/switch-society' ? 'active' : ''}`}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+          <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+        </svg>
+        Switch
+      </NavLink>
       <button
         className="nav-item"
         onClick={() => {
-          localStorage.removeItem('guard_token');
-          localStorage.removeItem('guard_data');
-          localStorage.removeItem('society_id');
-          window.location.href = '/';
+          if (window.confirm("Are you sure you want to logout?")) {
+            localStorage.removeItem('guard_token');
+            localStorage.removeItem('guard_data');
+            localStorage.removeItem('society_id');
+            window.location.href = '/';
+          }
         }}
         style={{ border: 'none', background: 'none', cursor: 'pointer' }}
       >
@@ -78,6 +88,7 @@ function GuardApp() {
         <Route path="/inside" element={<CurrentlyInside toast={toast} />} />
         <Route path="/assign-qr" element={<AssignQR toast={toast} />} />
         <Route path="/history" element={<History toast={toast} />} />
+        <Route path="/switch-society" element={<SocietySwitcher />} />
         <Route path="*" element={<Navigate to="/entry" replace />} />
       </Routes>
     </>

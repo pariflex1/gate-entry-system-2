@@ -1,6 +1,7 @@
 require('dotenv').config({ path: __dirname + '/.env' });
 
 const express = require('express');
+const fs = require('fs');
 const cors = require('cors');
 const helmet = require('helmet');
 
@@ -125,12 +126,43 @@ app.get('/api/society/:slug', async (req, res) => {
             return res.status(404).json({ error: 'Society not found' });
         }
 
-        return res.json(society);
+        return res.json({
+            id: society.id,
+            name: society.name,
+            slug: society.slug,
+            status: society.status,
+        });
     } catch (error) {
         console.error('Society lookup error:', error);
         return res.status(500).json({ error: 'Internal server error' });
     }
 });
+
+// ============ STATIC FILES (FRONTEND) ============
+const path = require('path');
+const distPath = path.join(__dirname, '..', 'dist');
+
+if (fs.existsSync(distPath)) {
+    // Serve static files from the dist folder
+    app.use(express.static(distPath));
+
+    // Handle Admin Portal (SPA)
+    app.get(['/admin', '/admin/*'], (req, res) => {
+        res.sendFile(path.join(distPath, 'admin', 'index.html'));
+    });
+
+    // Handle Guard Portal (SPA)
+    app.get(['/client', '/client/*'], (req, res) => {
+        res.sendFile(path.join(distPath, 'client', 'index.html'));
+    });
+
+    // Fallback for root (portal selector)
+    app.get('*', (req, res, next) => {
+        // If it's an API route that wasn't matched, skip to 404
+        if (req.path.startsWith('/api/')) return next();
+        res.sendFile(path.join(distPath, 'index.html'));
+    });
+}
 
 // ============ ERROR HANDLING ============
 

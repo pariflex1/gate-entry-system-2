@@ -16,10 +16,13 @@ function authenticate(req, res, next) {
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         req.user = decoded;
-        req.society_id = decoded.society_id;
         req.role = decoded.role;
         req.guard_id = decoded.guard_id || null;
         req.admin_id = decoded.admin_id || null;
+
+        // society_id can come from JWT (guards) or header (admins)
+        req.society_id = decoded.society_id || req.headers['x-society-id'];
+
         next();
     } catch (error) {
         if (error.name === 'TokenExpiredError') {
@@ -35,6 +38,9 @@ function authenticate(req, res, next) {
 function guardOnly(req, res, next) {
     if (req.role !== 'guard') {
         return res.status(403).json({ error: 'Guard access required' });
+    }
+    if (!req.society_id) {
+        return res.status(400).json({ error: 'Society ID missing from session' });
     }
     next();
 }
@@ -55,25 +61,67 @@ function adminOnly(req, res, next) {
  */
 async function checkSocietyActive(req, res, next) {
     try {
-        const { data, error } = await insforge.database
+        if (!req.society_id) {
+            // If no society_id, we can only check user status
+            if (req.admin_id) {
+                const { data: user } = await insforge.database
+                    .from('users')
+                    .select('status')
+                    .eq('id', req.admin_id)
+                    .single();
+                if (!user || user.status !== 'active') {
+                    return res.status(403).json({ error: 'User account is not active' });
+                }
+                return next();
+            }
+            return res.status(400).json({ error: 'Society selection required' });
+        }
+
+        const { data: society, error } = await insforge.database
             .from('societies')
-            .select('status')
+            .select('status, admin_id')
             .eq('id', req.society_id)
             .single();
 
-        if (error || !data) {
+        if (error || !society) {
             return res.status(403).json({ error: 'Society not found' });
         }
-        if (data.status === 'suspended') {
-            return res.status(403).json({ error: 'Your society has been suspended. Contact support.' });
+
+        // Security Check: If admin, verify ownership
+        if (req.role === 'admin' && society.admin_id !== req.admin_id) {
+            return res.status(403).json({ error: 'Permission denied: You do not own this society' });
         }
-        if (data.status !== 'active') {
+
+        if (society.status !== 'active') {
             return res.status(403).json({ error: 'Society is not active' });
         }
+
+        // Also check owner status
+        const { data: user } = await insforge.database
+            .from('users')
+            .select('status')
+            .eq('id', society.admin_id)
+            .single();
+
+        if (!user || user.status !== 'active') {
+            return res.status(403).json({ error: 'Society owner is not active' });
+        }
+
         next();
     } catch (err) {
-        return res.status(500).json({ error: 'Failed to verify society status' });
+        console.error('Check society active error:', err);
+        return res.status(500).json({ error: 'Failed to verify status' });
     }
 }
 
-module.exports = { authenticate, guardOnly, adminOnly, checkSocietyActive };
+/**
+ * Force society selection — must be used AFTER authenticate
+ */
+function societyRequired(req, res, next) {
+    if (!req.society_id) {
+        return res.status(400).json({ error: 'Society selection required. Please select a society from the top menu.' });
+    }
+    next();
+}
+
+module.exports = { authenticate, guardOnly, adminOnly, checkSocietyActive, societyRequired };

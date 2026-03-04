@@ -7,7 +7,17 @@ import { useMemo } from 'react';
  */
 export function useSociety() {
     const society = useMemo(() => {
+        // 0. Check logged in context (Highest priority)
+        const guardData = localStorage.getItem('guard_data');
+        if (guardData) {
+            try {
+                const parsed = JSON.parse(guardData);
+                if (parsed.society_slug) return parsed.society_slug;
+            } catch (e) { /* ignore */ }
+        }
+
         const hostname = window.location.hostname;
+        // ... (rest as before)
 
         // Production: extract slug from subdomain
         if (hostname.endsWith('.jhansiproperty.com')) {
@@ -28,7 +38,7 @@ export function useSociety() {
         if (stored) return stored;
 
         // Fallback
-        return 'demo';
+        return null;
     }, []);
 
     return society;

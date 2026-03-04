@@ -373,7 +373,7 @@ Approve: InsForge dashboard → society_admins → status = active
 
 > App checks `status` on every admin login — no webhook needed. Change takes effect on next login attempt.
 
-### 7.4 Admin Login (`jhansiproperty.com/admin/login`)
+### 7.4 Admin Login (`entry.jhansiproperty.com/admin/login`)
 
 - Email + password → check `status = active` AND `email_verified = true`
 - JWT issued: `{ role: 'admin', admin_id, society_id, exp: now+8h }`
@@ -392,7 +392,7 @@ Approve: InsForge dashboard → society_admins → status = active
 
 ## 8. Guard App — Screens
 
-> Guard app URL: `{slug}.jhansiproperty.com`. App reads subdomain to identify society. All queries scoped to that `society_id`.
+> Guard app URL: `entry.jhansiproperty.com`. App reads subdomain to identify society. All queries scoped to that `society_id`.
 
 ### 8.1 Login
 
@@ -488,7 +488,7 @@ Photo:{url}`
 
 ---
 
-## 9. Admin Portal — `jhansiproperty.com/admin`
+## 9. Admin Portal — `entry.jhansiproperty.com/admin`
 
 > All queries scoped by `society_id` from JWT. Admin sees only their own society.
 

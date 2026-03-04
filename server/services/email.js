@@ -44,7 +44,7 @@ async function sendApprovalRequest(societyName, adminName, adminEmail, adminMobi
       <tr><td style="padding:8px;font-weight:bold;">Admin:</td><td style="padding:8px;">${adminName} (${adminEmail})</td></tr>
       <tr><td style="padding:8px;font-weight:bold;">Mobile:</td><td style="padding:8px;">${adminMobile}</td></tr>
     </table>
-    <p><strong>Action:</strong> InsForge dashboard → society_admins → set status = active</p>
+    <p><strong>Action:</strong> InsForge dashboard → users → set status = active</p>
   `;
     return sendEmail(process.env.SUPERADMIN_EMAIL, subject, html);
 }
@@ -81,9 +81,27 @@ async function sendPasswordResetEmail(email, name, token) {
     return sendEmail(email, subject, html);
 }
 
+/**
+ * Send notification to super admin about a new admin signup
+ */
+async function sendAdminSignupNotification({ name, email, mobile }) {
+    const subject = '[Gate Entry] New Admin Signup Notification';
+    const html = `
+    <h2>New Admin Signup</h2>
+    <table style="border-collapse:collapse;">
+      <tr><td style="padding:8px;font-weight:bold;">Name:</td><td style="padding:8px;">${name}</td></tr>
+      <tr><td style="padding:8px;font-weight:bold;">Email:</td><td style="padding:8px;">${email}</td></tr>
+      <tr><td style="padding:8px;font-weight:bold;">Mobile:</td><td style="padding:8px;">${mobile}</td></tr>
+    </table>
+    <p><strong>Action:</strong> Review and activate account via InsForge dashboard → users → set status = active</p>
+  `;
+    return sendEmail(process.env.SUPERADMIN_EMAIL, subject, html);
+}
+
 module.exports = {
     sendEmail,
     sendApprovalRequest,
     sendVerificationEmail,
     sendPasswordResetEmail,
+    sendAdminSignupNotification,
 };

@@ -209,36 +209,20 @@ router.post('/:id/vehicles', async (req, res) => {
             return res.status(400).json({ error: 'Vehicle number format must be AA-00-AA-0000 (e.g. MH-12-AB-1234)' });
         }
 
-        // Check for duplicate within society
+        // Check if exists for THIS person
         const { data: existing } = await insforge.database
             .from('person_vehicles')
-            .select('id, person_id')
+            .select('*')
             .eq('society_id', req.society_id)
+            .eq('person_id', req.params.id)
             .eq('vehicle_number', vehicle_number)
             .maybeSingle();
 
         if (existing) {
-            if (existing.person_id === req.params.id) {
-                // Same person — just return the existing vehicle
-                return res.json({ vehicle: existing, duplicate: 'same_person' });
-            } else {
-                // Different person — get name for warning
-                const { data: otherPerson } = await insforge.database
-                    .from('known_persons')
-                    .select('name')
-                    .eq('id', existing.person_id)
-                    .single();
-
-                return res.status(409).json({
-                    error: `${vehicle_number} is registered to ${otherPerson?.name || 'another person'}. Link or cancel?`,
-                    duplicate: 'different_person',
-                    existing_person_name: otherPerson?.name || 'Unknown',
-                    existing_vehicle_id: existing.id,
-                });
-            }
+            return res.json({ vehicle: existing, duplicate: 'same_person' });
         }
 
-        // Insert new vehicle
+        // Insert new vehicle link (Shared vehicle support)
         const { data: vehicle, error } = await insforge.database
             .from('person_vehicles')
             .insert({
@@ -257,6 +241,93 @@ router.post('/:id/vehicles', async (req, res) => {
         return res.status(201).json({ vehicle, duplicate: null });
     } catch (error) {
         console.error('Add vehicle error:', error);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+/**
+ * PUT /api/persons/:person_id/vehicles/:vehicle_id
+ * Update a vehicle number
+ * Body: { vehicle_number }
+ */
+router.put('/:person_id/vehicles/:vehicle_id', async (req, res) => {
+    try {
+        const { vehicle_number } = req.body;
+        if (!vehicle_number) {
+            return res.status(400).json({ error: 'vehicle_number is required' });
+        }
+
+        const formatRegex = /^[A-Z]{2}-[0-9]{2}-[A-Z]{2}-[0-9]{4}$/;
+        if (!formatRegex.test(vehicle_number)) {
+            return res.status(400).json({ error: 'Vehicle number format must be AA-00-AA-0000 (e.g. MH-12-AB-1234)' });
+        }
+
+        // Check for duplicate within society (excluding this vehicle)
+        // Check if vehicle number exists for ANOTHER person in SAME society
+        // We ALLOW this now for shared vehicles logic.
+        // We only block if the SAME person already has this vehicle number (though that's handled by PUT logic usually).
+
+        // No restriction here anymore to support "one vehicle multiple persons"
+        /*
+        const { data: existing } = await insforge.database
+            .from('person_vehicles')
+            .select('id')
+            .eq('society_id', req.user.society_id)
+            .eq('vehicle_number', vehicle_number.toUpperCase())
+            .neq('person_id', person_id)
+            .single();
+        if (existing) ...
+        */
+
+        const { data, error } = await insforge.database
+            .from('person_vehicles')
+            .update({ vehicle_number })
+            .eq('id', req.params.vehicle_id)
+            .eq('society_id', req.society_id)
+            .select()
+            .single();
+
+        if (error) {
+            return res.status(500).json({ error: 'Failed to update vehicle' });
+        }
+
+        return res.json(data);
+    } catch (error) {
+        console.error('Update vehicle error:', error);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+/**
+ * DELETE /api/persons/:person_id/vehicles/:vehicle_id
+ * Delete a vehicle (blocked if referenced in gate_entries)
+ */
+router.delete('/:person_id/vehicles/:vehicle_id', async (req, res) => {
+    try {
+        // Check if vehicle is referenced in gate_entries
+        const { data: entries } = await insforge.database
+            .from('gate_entries')
+            .select('id')
+            .eq('vehicle_id', req.params.vehicle_id)
+            .limit(1);
+
+        if (entries && entries.length > 0) {
+            return res.status(400).json({ error: 'Cannot delete vehicle — it is referenced in gate entries.' });
+        }
+
+        const { error } = await insforge.database
+            .from('person_vehicles')
+            .delete()
+            .eq('id', req.params.vehicle_id)
+            .eq('society_id', req.society_id);
+
+        if (error) {
+            return res.status(500).json({ error: 'Failed to delete vehicle' });
+        }
+
+        return res.json({ message: 'Vehicle deleted successfully' });
+    } catch (error) {
+        console.error('Delete vehicle error:', error);
         return res.status(500).json({ error: 'Internal server error' });
     }
 });

@@ -56,7 +56,7 @@ export default function Login({ onLogin }) {
             alignItems: 'center',
             justifyContent: 'center',
             padding: 24,
-            background: 'linear-gradient(135deg, #0F172A 0%, #1E293B 50%, #0F172A 100%)',
+            background: 'linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 50%, var(--bg-primary) 100%)',
         }}>
             {/* Logo / Branding */}
             <div style={{ textAlign: 'center', marginBottom: 32 }}>
@@ -76,7 +76,7 @@ export default function Login({ onLogin }) {
                 <h1 style={{
                     fontSize: '1.75rem',
                     fontWeight: 800,
-                    background: 'linear-gradient(135deg, #F1F5F9, #3B82F6)',
+                    background: 'linear-gradient(135deg, var(--text-primary), var(--primary-light))',
                     WebkitBackgroundClip: 'text',
                     WebkitTextFillColor: 'transparent',
                 }}>
@@ -88,72 +88,114 @@ export default function Login({ onLogin }) {
             </div>
 
             {/* Login Card */}
-            <form onSubmit={handleSubmit} className="glass-card" style={{
-                width: '100%',
-                maxWidth: 380,
-                padding: 28,
-            }}>
-                {lockoutMsg && (
+            {!slug ? (
+                <div className="glass-card" style={{
+                    width: '100%',
+                    maxWidth: 380,
+                    padding: 28,
+                    textAlign: 'center'
+                }}>
+                    <div style={{ fontSize: 40, marginBottom: 16 }}>⚠️</div>
+                    <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: 8 }}>Society Context Missing</h3>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.5 }}>
+                        You are trying to log in without a society identification. Please use the <b>exclusive login link</b> provided by your administrator.
+                    </p>
                     <div style={{
+                        marginTop: 20,
                         padding: 12,
                         borderRadius: 8,
-                        background: 'rgba(239, 68, 68, 0.15)',
-                        border: '1px solid rgba(239, 68, 68, 0.3)',
-                        color: 'var(--danger-light)',
-                        fontSize: '0.875rem',
-                        marginBottom: 16,
-                        textAlign: 'center',
+                        background: 'rgba(255,255,255,0.05)',
+                        fontSize: '0.8rem',
+                        color: 'var(--text-muted)'
                     }}>
-                        🔒 {lockoutMsg}
+                        Example format:<br />
+                        <code>?slug=your-society-slug</code>
                     </div>
+                </div>
+            ) : (
+                <form onSubmit={handleSubmit} className="glass-card" style={{
+                    width: '100%',
+                    maxWidth: 380,
+                    padding: 28,
+                }}>
+                    {lockoutMsg && (
+                        <div style={{
+                            padding: 12,
+                            borderRadius: 8,
+                            background: 'rgba(239, 68, 68, 0.15)',
+                            border: '1px solid rgba(239, 68, 68, 0.3)',
+                            color: 'var(--danger-light)',
+                            fontSize: '0.875rem',
+                            marginBottom: 16,
+                            textAlign: 'center',
+                        }}>
+                            🔒 {lockoutMsg}
+                        </div>
+                    )}
+
+                    <div style={{ marginBottom: 18 }}>
+                        <label className="input-label">Mobile Number</label>
+                        <input
+                            type="tel"
+                            className={`input-field ${error ? 'input-error' : ''}`}
+                            placeholder="Enter 10-digit mobile"
+                            value={mobile}
+                            onChange={(e) => {
+                                const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+                                setMobile(val);
+                                setError('');
+                            }}
+                            inputMode="numeric"
+                            maxLength={10}
+                            autoComplete="tel"
+                        />
+                    </div>
+
+                    <div style={{ marginBottom: 24 }}>
+                        <label className="input-label">4-Digit PIN</label>
+                        <input
+                            type="password"
+                            className={`input-field ${error ? 'input-error' : ''}`}
+                            placeholder="••••"
+                            value={pin}
+                            onChange={(e) => {
+                                const val = e.target.value.replace(/\D/g, '').slice(0, 4);
+                                setPin(val);
+                                setError('');
+                            }}
+                            inputMode="numeric"
+                            maxLength={4}
+                            style={{ letterSpacing: 8, textAlign: 'center', fontSize: '1.5rem' }}
+                        />
+                    </div>
+
+                    {error && <p className="error-text" style={{ marginBottom: 12, textAlign: 'center' }}>{error}</p>}
+
+                    <button type="submit" className="btn btn-primary btn-full" disabled={loading}>
+                        {loading ? <><span className="spinner" /> Logging in...</> : 'Login'}
+                    </button>
+                </form>
+            )}
+
+            <div style={{ marginTop: '20px', textAlign: 'center', fontSize: '10px', color: '#999', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                Society: <strong style={{ color: 'var(--text-secondary)' }}>{slug || 'NONE'}</strong>
+                {/* Dev helper to change slug */}
+                {window.location.hostname === 'localhost' && (
+                    <button
+                        type="button"
+                        onClick={() => {
+                            const newSlug = prompt('Enter Society Slug:', slug || '');
+                            if (newSlug) {
+                                localStorage.setItem('dev_society_slug', newSlug);
+                                window.location.reload();
+                            }
+                        }}
+                        style={{ marginLeft: '10px', background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', fontSize: '10px' }}
+                    >
+                        Change
+                    </button>
                 )}
-
-                <div style={{ marginBottom: 18 }}>
-                    <label className="input-label">Mobile Number</label>
-                    <input
-                        type="tel"
-                        className={`input-field ${error ? 'input-error' : ''}`}
-                        placeholder="Enter 10-digit mobile"
-                        value={mobile}
-                        onChange={(e) => {
-                            const val = e.target.value.replace(/\D/g, '').slice(0, 10);
-                            setMobile(val);
-                            setError('');
-                        }}
-                        inputMode="numeric"
-                        maxLength={10}
-                        autoComplete="tel"
-                    />
-                </div>
-
-                <div style={{ marginBottom: 24 }}>
-                    <label className="input-label">4-Digit PIN</label>
-                    <input
-                        type="password"
-                        className={`input-field ${error ? 'input-error' : ''}`}
-                        placeholder="••••"
-                        value={pin}
-                        onChange={(e) => {
-                            const val = e.target.value.replace(/\D/g, '').slice(0, 4);
-                            setPin(val);
-                            setError('');
-                        }}
-                        inputMode="numeric"
-                        maxLength={4}
-                        style={{ letterSpacing: 8, textAlign: 'center', fontSize: '1.5rem' }}
-                    />
-                </div>
-
-                {error && <p className="error-text" style={{ marginBottom: 12, textAlign: 'center' }}>{error}</p>}
-
-                <button type="submit" className="btn btn-primary btn-full" disabled={loading}>
-                    {loading ? <><span className="spinner" /> Logging in...</> : 'Login'}
-                </button>
-            </form>
-
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: 24 }}>
-                Society: <strong style={{ color: 'var(--text-secondary)' }}>{slug}</strong>
-            </p>
+            </div>
         </div>
     );
 }

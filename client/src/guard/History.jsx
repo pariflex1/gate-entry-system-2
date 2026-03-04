@@ -37,14 +37,31 @@ export default function History({ toast }) {
             ) : (
                 entries.map((e) => (
                     <div key={e.id} className="entry-card">
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                            <span style={{ fontWeight: 700 }}>{e.person_name}</span>
-                            <span className={`badge ${e.entry_type === 'IN' ? 'badge-in' : 'badge-out'}`}>
-                                {e.entry_type}
-                            </span>
+                        <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 8 }}>
+                            {e.person_photo_url && (
+                                <div style={{ width: 40, height: 40, borderRadius: '50%', overflow: 'hidden', backgroundColor: 'var(--bg-secondary)', flexShrink: 0 }}>
+                                    <img src={e.person_photo_url} alt="Person" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                </div>
+                            )}
+                            <div style={{ flex: 1 }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
+                                    <span style={{ fontWeight: 700 }}>{e.person_name}</span>
+                                    <span className={`badge ${e.entry_type === 'IN' ? 'badge-in' : 'badge-out'}`}>
+                                        {e.entry_type}
+                                    </span>
+                                </div>
+                                <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                                    {e.unit || 'No unit'} • {e.purpose || '—'} • {e.entry_method}
+                                </div>
+                            </div>
+                            {e.vehicle_photo_url && (
+                                <div style={{ width: 40, height: 40, borderRadius: 8, overflow: 'hidden', backgroundColor: 'var(--bg-secondary)', flexShrink: 0 }}>
+                                    <img src={e.vehicle_photo_url} alt="Vehicle" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                </div>
+                            )}
                         </div>
-                        <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-                            {e.unit || 'No unit'} • {e.purpose || '—'} • {e.entry_method}
+                        <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: 4 }}>
+                            {e.guard_name && <span>Guard: {e.guard_name}</span>}
                         </div>
                         <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: 2, display: 'flex', justifyContent: 'space-between' }}>
                             <span>{format(new Date(e.entry_time), 'hh:mm a')}</span>

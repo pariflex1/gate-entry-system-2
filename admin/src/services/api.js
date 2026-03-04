@@ -9,6 +9,10 @@ const api = axios.create({
 api.interceptors.request.use((config) => {
     const token = localStorage.getItem('admin_token');
     if (token) config.headers.Authorization = `Bearer ${token}`;
+
+    const societyId = localStorage.getItem('selected_society_id');
+    if (societyId) config.headers['x-society-id'] = societyId;
+
     return config;
 });
 

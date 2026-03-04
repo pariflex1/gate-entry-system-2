@@ -1,12 +1,203 @@
 const express = require('express');
 const bcrypt = require('bcrypt');
 const insforge = require('../services/insforge');
-const { authenticate, adminOnly, checkSocietyActive } = require('../middleware/auth');
+const { authenticate, adminOnly, checkSocietyActive, societyRequired } = require('../middleware/auth');
 
 const router = express.Router();
 
 // All admin routes require admin auth
 router.use(authenticate, adminOnly, checkSocietyActive);
+
+// ============ SOCIETIES ============
+
+/**
+ * GET /api/admin/societies
+ * List all societies owned by the authenticated admin
+ */
+router.get('/societies', async (req, res) => {
+    try {
+        const { data, error } = await insforge.database
+            .from('societies')
+            .select('*')
+            .eq('admin_id', req.admin_id)
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            return res.status(500).json({ error: 'Failed to fetch societies' });
+        }
+
+        return res.json(data || []);
+    } catch (error) {
+        console.error('Admin societies error:', error);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+/**
+ * POST /api/admin/societies
+ * Create a new society
+ * Body: { name, address }
+ */
+router.post('/societies', async (req, res) => {
+    try {
+        const { name, address } = req.body;
+        if (!name) return res.status(400).json({ error: 'Society name is required' });
+
+        // Generate slug
+        const slug = name
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-|-$/g, '');
+
+        // Check uniqueness
+        const { data: existing } = await insforge.database
+            .from('societies')
+            .select('id')
+            .eq('slug', slug)
+            .maybeSingle();
+
+        if (existing) {
+            return res.status(409).json({ error: 'A society with a similar name already exists' });
+        }
+
+        const { data: society, error } = await insforge.database
+            .from('societies')
+            .insert({
+                admin_id: req.admin_id,
+                name,
+                slug,
+                address: address || null,
+                status: 'active',
+            })
+            .select()
+            .single();
+
+        if (error) {
+            console.error('Society insert error:', error);
+            return res.status(500).json({ error: 'Failed to create society' });
+        }
+
+        return res.status(201).json(society);
+    } catch (error) {
+        console.error('Create society error:', error);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+/**
+ * PUT /api/admin/societies/:id
+ */
+router.put('/societies/:id', async (req, res) => {
+    try {
+        const { name, address, status } = req.body;
+        const updateData = {};
+        if (name) updateData.name = name;
+        if (address !== undefined) updateData.address = address;
+        if (status) updateData.status = status;
+
+        const { data, error } = await insforge.database
+            .from('societies')
+            .update(updateData)
+            .eq('id', req.params.id)
+            .eq('admin_id', req.admin_id)
+            .select()
+            .single();
+
+        if (error) {
+            return res.status(500).json({ error: 'Failed to update society' });
+        }
+
+        return res.json(data);
+    } catch (error) {
+        console.error('Update society error:', error);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+/**
+ * DELETE /api/admin/societies/:id
+ */
+router.delete('/societies/:id', async (req, res) => {
+    try {
+        const { error } = await insforge.database
+            .from('societies')
+            .delete()
+            .eq('id', req.params.id)
+            .eq('admin_id', req.admin_id);
+
+        if (error) {
+            return res.status(500).json({ error: 'Failed to delete society' });
+        }
+
+        return res.json({ message: 'Society deleted' });
+    } catch (error) {
+        console.error('Delete society error:', error);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// ============ ACCOUNT SETTINGS ============
+
+/**
+ * PUT /api/admin/account
+ * Body: { name, mobile, current_password, new_password }
+ */
+router.put('/account', async (req, res) => {
+    try {
+        const { name, mobile, current_password, new_password } = req.body;
+        const updateData = {};
+
+        if (name) updateData.name = name;
+        if (mobile) updateData.mobile = mobile;
+
+        // If changing password
+        if (new_password) {
+            if (!current_password) {
+                return res.status(400).json({ error: 'Current password is required to set a new password' });
+            }
+
+            const { data: admin } = await insforge.database
+                .from('users')
+                .select('password_hash')
+                .eq('id', req.admin_id)
+                .single();
+
+            const validCurrent = await bcrypt.compare(current_password, admin.password_hash);
+            if (!validCurrent) {
+                return res.status(401).json({ error: 'Current password is incorrect' });
+            }
+
+            if (new_password.length < 8) {
+                return res.status(400).json({ error: 'New password must be at least 8 characters' });
+            }
+
+            updateData.password_hash = await bcrypt.hash(new_password, 12);
+        }
+
+        if (Object.keys(updateData).length === 0) {
+            return res.status(400).json({ error: 'No fields to update' });
+        }
+
+        const { data, error } = await insforge.database
+            .from('users')
+            .update(updateData)
+            .eq('id', req.admin_id)
+            .select('id, name, email, mobile')
+            .single();
+
+        if (error) {
+            return res.status(500).json({ error: 'Failed to update account' });
+        }
+
+        return res.json(data);
+    } catch (error) {
+        console.error('Update account error:', error);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Routes below this line REQUIRE a society to be selected
+router.use(societyRequired);
 
 /**
  * GET /api/admin/dashboard
@@ -216,10 +407,11 @@ router.post('/guards', async (req, res) => {
  */
 router.put('/guards/:id', async (req, res) => {
     try {
-        const { active, name } = req.body;
+        const { active, name, mobile } = req.body;
         const updateData = {};
         if (active !== undefined) updateData.active = active;
         if (name !== undefined) updateData.name = name;
+        if (mobile !== undefined) updateData.mobile = mobile;
 
         const { data, error } = await insforge.database
             .from('guards')
@@ -408,6 +600,28 @@ router.put('/units/:id', async (req, res) => {
     }
 });
 
+/**
+ * DELETE /api/admin/units/:id
+ */
+router.delete('/units/:id', async (req, res) => {
+    try {
+        const { error } = await insforge.database
+            .from('units')
+            .delete()
+            .eq('id', req.params.id)
+            .eq('society_id', req.society_id);
+
+        if (error) {
+            return res.status(500).json({ error: 'Failed to delete unit' });
+        }
+
+        return res.json({ message: 'Unit deleted successfully' });
+    } catch (error) {
+        console.error('Delete unit error:', error);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 // ============ QR CODES ============
 
 /**
@@ -503,6 +717,28 @@ router.put('/qr/:code', async (req, res) => {
         return res.json(data);
     } catch (error) {
         console.error('Update QR error:', error);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+/**
+ * DELETE /api/admin/qr/:code
+ */
+router.delete('/qr/:code', async (req, res) => {
+    try {
+        const { error } = await insforge.database
+            .from('qr_codes')
+            .delete()
+            .eq('qr_code', req.params.code)
+            .eq('society_id', req.society_id);
+
+        if (error) {
+            return res.status(500).json({ error: 'Failed to delete QR code' });
+        }
+
+        return res.json({ message: 'QR Code deleted successfully' });
+    } catch (error) {
+        console.error('Delete QR error:', error);
         return res.status(500).json({ error: 'Internal server error' });
     }
 });
@@ -627,64 +863,5 @@ router.get('/logs/activity', async (req, res) => {
     }
 });
 
-// ============ ACCOUNT SETTINGS ============
-
-/**
- * PUT /api/admin/account
- * Body: { name, mobile, current_password, new_password }
- */
-router.put('/account', async (req, res) => {
-    try {
-        const { name, mobile, current_password, new_password } = req.body;
-        const updateData = {};
-
-        if (name) updateData.name = name;
-        if (mobile) updateData.mobile = mobile;
-
-        // If changing password
-        if (new_password) {
-            if (!current_password) {
-                return res.status(400).json({ error: 'Current password is required to set a new password' });
-            }
-
-            const { data: admin } = await insforge.database
-                .from('society_admins')
-                .select('password_hash')
-                .eq('id', req.admin_id)
-                .single();
-
-            const validCurrent = await bcrypt.compare(current_password, admin.password_hash);
-            if (!validCurrent) {
-                return res.status(401).json({ error: 'Current password is incorrect' });
-            }
-
-            if (new_password.length < 8) {
-                return res.status(400).json({ error: 'New password must be at least 8 characters' });
-            }
-
-            updateData.password_hash = await bcrypt.hash(new_password, 12);
-        }
-
-        if (Object.keys(updateData).length === 0) {
-            return res.status(400).json({ error: 'No fields to update' });
-        }
-
-        const { data, error } = await insforge.database
-            .from('society_admins')
-            .update(updateData)
-            .eq('id', req.admin_id)
-            .select('id, name, email, mobile')
-            .single();
-
-        if (error) {
-            return res.status(500).json({ error: 'Failed to update account' });
-        }
-
-        return res.json(data);
-    } catch (error) {
-        console.error('Update account error:', error);
-        return res.status(500).json({ error: 'Internal server error' });
-    }
-});
 
 module.exports = router;

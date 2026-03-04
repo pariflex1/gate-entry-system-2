@@ -63,6 +63,22 @@ router.post('/', async (req, res) => {
             entryData.synced_at = synced_at || new Date().toISOString();
         }
 
+        // Prevent double IN entries for the same person
+        if (entry_type === 'IN') {
+            const { data: latestEntry } = await insforge.database
+                .from('gate_entries')
+                .select('entry_type')
+                .eq('society_id', req.society_id)
+                .eq('person_id', person_id)
+                .order('entry_time', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+            if (latestEntry && latestEntry.entry_type === 'IN') {
+                return res.status(409).json({ error: 'This person is already inside. Must record OUT entry before entering again.' });
+            }
+        }
+
         const { data: entry, error } = await insforge.database
             .from('gate_entries')
             .insert(entryData)
@@ -95,15 +111,35 @@ router.post('/', async (req, res) => {
 
             const { data: person } = await insforge.database
                 .from('known_persons')
-                .select('name')
+                .select('name, person_photo_url')
                 .eq('id', person_id)
                 .single();
 
+            // Fetch vehicle number if vehicle_id is present
+            let vehicleNumber = null;
+            if (vehicle_id) {
+                const { data: vehicle } = await insforge.database
+                    .from('person_vehicles')
+                    .select('vehicle_number')
+                    .eq('id', vehicle_id)
+                    .maybeSingle();
+                vehicleNumber = vehicle?.vehicle_number || null;
+            }
+
             const ownerMobile = unitData?.owner_mobile;
-            if (ownerMobile || process.env.SUPERADMIN_WHATSAPP) {
-                const phone = ownerMobile ? `91${ownerMobile}` : process.env.SUPERADMIN_WHATSAPP;
+            let phone = null;
+            if (ownerMobile) {
+                phone = `91${ownerMobile}`;
+            } else if (process.env.SUPERADMIN_WHATSAPP) {
+                // Remove formatting characters from superadmin phone number
+                phone = process.env.SUPERADMIN_WHATSAPP.replace(/\D/g, '');
+            }
+
+            if (phone) {
+                const photoText = person?.person_photo_url ? `\nPhoto: ${person.person_photo_url}` : '';
+                const vehicleText = vehicleNumber ? `\nVehicle: ${vehicleNumber}` : '';
                 const text = encodeURIComponent(
-                    `Visitor Entry Alert\nName: ${person?.name || 'Unknown'}\nUnit: ${unit}\nPurpose: ${purpose || 'N/A'}`
+                    `Visitor Entry Alert\nName: ${person?.name || 'Unknown'}\nUnit: ${unit}\nPurpose: ${purpose || 'N/A'}${vehicleText}${photoText}`
                 );
                 whatsappLink = `https://wa.me/${phone}?text=${text}`;
             }
@@ -149,18 +185,33 @@ router.get('/inside', async (req, res) => {
         if (personIds.length > 0) {
             const { data } = await insforge.database
                 .from('known_persons')
-                .select('id, name, mobile')
+                .select('id, name, mobile, person_photo_url')
                 .in('id', personIds);
             persons = data || [];
+        }
+
+        const vehicleIds = insideEntries.map(e => e.vehicle_id).filter(Boolean);
+        let vehicles = [];
+        if (vehicleIds.length > 0) {
+            const { data } = await insforge.database
+                .from('person_vehicles')
+                .select('id, vehicle_photo_url')
+                .in('id', vehicleIds);
+            vehicles = data || [];
         }
 
         const personMap = {};
         for (const p of persons) personMap[p.id] = p;
 
+        const vehicleMap = {};
+        for (const v of vehicles) vehicleMap[v.id] = v;
+
         const result = insideEntries.map(e => ({
             ...e,
             person_name: personMap[e.person_id]?.name || 'Unknown',
             person_mobile: personMap[e.person_id]?.mobile || '',
+            person_photo_url: personMap[e.person_id]?.person_photo_url || null,
+            vehicle_photo_url: e.vehicle_id ? vehicleMap[e.vehicle_id]?.vehicle_photo_url || null : null,
         }));
 
         return res.json(result);
@@ -196,18 +247,49 @@ router.get('/history', async (req, res) => {
         if (personIds.length > 0) {
             const { data } = await insforge.database
                 .from('known_persons')
-                .select('id, name, mobile')
+                .select('id, name, mobile, person_photo_url')
                 .in('id', personIds);
             persons = data || [];
+        }
+
+        // Fetch vehicle photos
+        const vehicleIds = (entries || []).map(e => e.vehicle_id).filter(Boolean);
+        let vehicles = [];
+        if (vehicleIds.length > 0) {
+            const { data } = await insforge.database
+                .from('person_vehicles')
+                .select('id, vehicle_photo_url')
+                .in('id', vehicleIds);
+            vehicles = data || [];
+        }
+
+        // Fetch guard names
+        const guardIds = [...new Set((entries || []).map(e => e.guard_id))];
+        let guards = [];
+        if (guardIds.length > 0) {
+            const { data } = await insforge.database
+                .from('guards')
+                .select('id, name')
+                .in('id', guardIds);
+            guards = data || [];
         }
 
         const personMap = {};
         for (const p of persons) personMap[p.id] = p;
 
+        const vehicleMap = {};
+        for (const v of vehicles) vehicleMap[v.id] = v;
+
+        const guardMap = {};
+        for (const g of guards) guardMap[g.id] = g;
+
         const result = (entries || []).map(e => ({
             ...e,
             person_name: personMap[e.person_id]?.name || 'Unknown',
             person_mobile: personMap[e.person_id]?.mobile || '',
+            person_photo_url: personMap[e.person_id]?.person_photo_url || null,
+            vehicle_photo_url: e.vehicle_id ? vehicleMap[e.vehicle_id]?.vehicle_photo_url || null : null,
+            guard_name: guardMap[e.guard_id]?.name || 'Unknown Guard',
         }));
 
         return res.json(result);

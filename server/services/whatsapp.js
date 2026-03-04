@@ -11,7 +11,7 @@ Society: ${societyName}
 Admin: ${adminName}
 Email: ${adminEmail}
 Mobile: ${adminMobile}
-Approve: InsForge dashboard → society_admins → status = active`;
+Approve: InsForge dashboard → users → status = active`;
 
     const phone = process.env.SUPERADMIN_WHATSAPP;
 

@@ -60,20 +60,36 @@ export default function CurrentlyInside({ toast }) {
                         {entries.length} visitor{entries.length !== 1 ? 's' : ''} inside
                     </p>
                     {entries.map((e) => (
-                        <div key={e.id} className="entry-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-                            <div style={{ flex: 1 }}>
-                                <div style={{ fontWeight: 700, fontSize: '1rem' }}>{e.person_name}</div>
-                                <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: 2 }}>
-                                    {e.unit || 'No unit'} • {e.entry_method}
+                        <div key={e.id} className="entry-card">
+                            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                                {e.person_photo_url && (
+                                    <div style={{ width: 48, height: 48, borderRadius: '50%', overflow: 'hidden', backgroundColor: 'var(--bg-secondary)', flexShrink: 0 }}>
+                                        <img src={e.person_photo_url} alt="Person" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                    </div>
+                                )}
+                                <div style={{ flex: 1 }}>
+                                    <div style={{ fontWeight: 700, fontSize: '1rem' }}>{e.person_name}</div>
+                                    <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: 2 }}>
+                                        {e.unit || 'No unit'} • {e.entry_method}
+                                    </div>
+                                    <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: 2 }}>
+                                        In since: {format(new Date(e.entry_time), 'hh:mm a')}
+                                    </div>
                                 </div>
-                                <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: 2 }}>
-                                    In since: {format(new Date(e.entry_time), 'hh:mm a')}
-                                </div>
+                                {e.vehicle_photo_url && (
+                                    <div style={{ width: 48, height: 48, borderRadius: 8, overflow: 'hidden', backgroundColor: 'var(--bg-secondary)', flexShrink: 0 }}>
+                                        <img src={e.vehicle_photo_url} alt="Vehicle" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                    </div>
+                                )}
                             </div>
                             <button
                                 className="btn btn-danger btn-sm"
                                 onClick={() => handleLogExit(e)}
                                 disabled={exitLoading === e.id}
+                                style={{
+                                    marginTop: 12,
+                                    width: '100%'
+                                }}
                             >
                                 {exitLoading === e.id ? <span className="spinner" style={{ width: 14, height: 14 }} /> : '↑ Exit'}
                             </button>

@@ -5,7 +5,7 @@ export default function Guards() {
     const [guards, setGuards] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
-    const [form, setForm] = useState({ name: '', mobile: '', pin: '' });
+    const [form, setForm] = useState({ id: null, name: '', mobile: '', pin: '' });
     const [error, setError] = useState('');
     const [saving, setSaving] = useState(false);
 
@@ -16,21 +16,39 @@ export default function Guards() {
 
     useEffect(() => { fetchGuards(); }, []);
 
-    const handleCreate = async (e) => {
+    const handleSave = async (e) => {
         e.preventDefault();
-        if (!form.name || !form.mobile || !form.pin) return setError('All fields required');
-        if (!/^\d{10}$/.test(form.mobile)) return setError('Mobile must be 10 digits');
-        if (!/^\d{4}$/.test(form.pin)) return setError('PIN must be 4 digits');
-        setSaving(true);
-        setError('');
-        try {
-            await api.post('/admin/guards', form);
-            setShowModal(false);
-            setForm({ name: '', mobile: '', pin: '' });
-            fetchGuards();
-        } catch (err) {
-            setError(err.response?.data?.error || 'Failed to create guard');
-        } finally { setSaving(false); }
+
+        if (form.id) {
+            // Edit guard
+            if (!form.name || !form.mobile) return setError('Name and mobile required');
+            if (!/^\d{10}$/.test(form.mobile)) return setError('Mobile must be 10 digits');
+            setSaving(true);
+            setError('');
+            try {
+                await api.put(`/admin/guards/${form.id}`, { name: form.name, mobile: form.mobile });
+                setShowModal(false);
+                setForm({ id: null, name: '', mobile: '', pin: '' });
+                fetchGuards();
+            } catch (err) {
+                setError(err.response?.data?.error || 'Failed to update guard');
+            } finally { setSaving(false); }
+        } else {
+            // Create guard
+            if (!form.name || !form.mobile || !form.pin) return setError('All fields required');
+            if (!/^\d{10}$/.test(form.mobile)) return setError('Mobile must be 10 digits');
+            if (!/^\d{4}$/.test(form.pin)) return setError('PIN must be 4 digits');
+            setSaving(true);
+            setError('');
+            try {
+                await api.post('/admin/guards', form);
+                setShowModal(false);
+                setForm({ id: null, name: '', mobile: '', pin: '' });
+                fetchGuards();
+            } catch (err) {
+                setError(err.response?.data?.error || 'Failed to create guard');
+            } finally { setSaving(false); }
+        }
     };
 
     const toggleActive = async (guard) => {
@@ -51,11 +69,30 @@ export default function Guards() {
         }
     };
 
+    const handleDelete = async (id) => {
+        if (!window.confirm("Are you sure you want to delete this guard? Guard can only be deleted if they don't have records attached to them.")) return;
+        try {
+            await api.delete(`/admin/guards/${id}`);
+            alert('Guard deleted successfully');
+            fetchGuards();
+        } catch (err) {
+            alert(err.response?.data?.error || 'Failed to delete guard. They might have activity. Try deactivating them instead.');
+        }
+    };
+
+    const handleEdit = (guard) => {
+        setForm({ id: guard.id, name: guard.name, mobile: guard.mobile, pin: '' });
+        setShowModal(true);
+    };
+
     return (
         <div>
             <div className="page-header">
                 <h1 className="page-title">Guards</h1>
-                <button className="btn btn-primary" onClick={() => setShowModal(true)}>+ Add Guard</button>
+                <button className="btn btn-primary" onClick={() => {
+                    setForm({ id: null, name: '', mobile: '', pin: '' });
+                    setShowModal(true);
+                }}>+ Add Guard</button>
             </div>
 
             {loading ? (
@@ -85,6 +122,8 @@ export default function Guards() {
                                         <div style={{ display: 'flex', gap: 6 }}>
                                             <button className="btn btn-outline btn-sm" onClick={() => toggleActive(g)}>{g.active ? 'Deactivate' : 'Activate'}</button>
                                             <button className="btn btn-outline btn-sm" onClick={() => resetPin(g.id)}>Reset PIN</button>
+                                            <button className="btn btn-outline btn-sm" onClick={() => handleEdit(g)}>Edit</button>
+                                            <button className="btn btn-danger btn-sm" onClick={() => handleDelete(g.id)}>Delete</button>
                                         </div>
                                     </td>
                                 </tr>
@@ -96,8 +135,8 @@ export default function Guards() {
 
             {showModal && (
                 <div className="modal-overlay" onClick={() => setShowModal(false)}>
-                    <form className="modal" onClick={e => e.stopPropagation()} onSubmit={handleCreate}>
-                        <h2 className="modal-title">Add New Guard</h2>
+                    <form className="modal" onClick={e => e.stopPropagation()} onSubmit={handleSave}>
+                        <h2 className="modal-title">{form.id ? 'Edit Guard' : 'Add New Guard'}</h2>
                         <div style={{ marginBottom: 14 }}>
                             <label className="label">Name</label>
                             <input className="input" placeholder="Guard name" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
@@ -107,15 +146,17 @@ export default function Guards() {
                             <input className="input" placeholder="10-digit mobile" value={form.mobile} maxLength={10}
                                 onChange={e => setForm({ ...form, mobile: e.target.value.replace(/\D/g, '').slice(0, 10) })} />
                         </div>
-                        <div style={{ marginBottom: 20 }}>
-                            <label className="label">PIN</label>
-                            <input className="input" type="password" placeholder="4-digit PIN" value={form.pin} maxLength={4}
-                                onChange={e => setForm({ ...form, pin: e.target.value.replace(/\D/g, '').slice(0, 4) })} />
-                        </div>
+                        {!form.id && (
+                            <div style={{ marginBottom: 20 }}>
+                                <label className="label">PIN</label>
+                                <input className="input" type="password" placeholder="4-digit PIN" value={form.pin} maxLength={4}
+                                    onChange={e => setForm({ ...form, pin: e.target.value.replace(/\D/g, '').slice(0, 4) })} />
+                            </div>
+                        )}
                         {error && <p style={{ color: '#F87171', fontSize: '0.85rem', marginBottom: 12 }}>{error}</p>}
                         <div style={{ display: 'flex', gap: 10 }}>
                             <button type="submit" className="btn btn-primary" disabled={saving}>
-                                {saving ? <span className="spinner" /> : 'Create Guard'}
+                                {saving ? <span className="spinner" /> : (form.id ? 'Save Edit' : 'Create Guard')}
                             </button>
                             <button type="button" className="btn btn-outline" onClick={() => setShowModal(false)}>Cancel</button>
                         </div>

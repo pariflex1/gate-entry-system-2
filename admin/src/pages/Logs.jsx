@@ -38,10 +38,66 @@ export default function Logs() {
 
     const totalPages = Math.ceil(total / limit);
 
+    const downloadCSV = async () => {
+        try {
+            setLoading(true);
+            const limit = 10000; // max rows to export
+            if (tab === 'entries') {
+                const res = await api.get(`/admin/logs/entries?page=1&limit=${limit}`);
+                const data = res.data.entries || [];
+                const headers = ['Time', 'Person Name', 'Mobile', 'Unit', 'Purpose', 'Type', 'Method', 'Guard'];
+                const rows = data.map(e => [
+                    format(new Date(e.entry_time), 'yyyy-MM-dd HH:mm:ss'),
+                    `"${e.person_name || ''}"`,
+                    e.person_mobile || '',
+                    `"${e.unit || ''}"`,
+                    `"${e.purpose || ''}"`,
+                    e.entry_type,
+                    e.entry_method,
+                    `"${e.guard_name || ''}"`
+                ]);
+                const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+                triggerDownload(csvContent, `gate_entries_${format(new Date(), 'yyyyMMdd_HHmm')}.csv`);
+            } else {
+                const res = await api.get(`/admin/logs/activity?page=1&limit=${limit}`);
+                const data = res.data.activities || [];
+                const headers = ['Time', 'Guard', 'Action', 'Detail'];
+                const rows = data.map(a => [
+                    format(new Date(a.created_at), 'yyyy-MM-dd HH:mm:ss'),
+                    `"${a.guard_name || ''}"`,
+                    a.action,
+                    `"${(a.detail || '').replace(/"/g, '""')}"`
+                ]);
+                const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+                triggerDownload(csvContent, `guard_activity_${format(new Date(), 'yyyyMMdd_HHmm')}.csv`);
+            }
+        } catch (err) {
+            console.error(err);
+            alert('Failed to generate report');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const triggerDownload = (csvContent, filename) => {
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", filename);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
     return (
         <div>
             <div className="page-header">
                 <h1 className="page-title">Logs</h1>
+                <button className="btn btn-outline" onClick={downloadCSV} disabled={loading}>
+                    Export {tab === 'entries' ? 'Entries' : 'Activity'}
+                </button>
             </div>
 
             {/* Tab switch */}
