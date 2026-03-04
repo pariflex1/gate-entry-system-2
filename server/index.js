@@ -147,17 +147,17 @@ if (fs.existsSync(distPath)) {
     app.use(express.static(distPath));
 
     // Handle Admin Portal (SPA)
-    app.get(['/admin', '/admin/*'], (req, res) => {
+    app.get(['/admin', '/admin/:path*'], (req, res) => {
         res.sendFile(path.join(distPath, 'admin', 'index.html'));
     });
 
     // Handle Guard Portal (SPA)
-    app.get(['/client', '/client/*'], (req, res) => {
+    app.get(['/client', '/client/:path*'], (req, res) => {
         res.sendFile(path.join(distPath, 'client', 'index.html'));
     });
 
     // Fallback for root (portal selector)
-    app.get('*', (req, res, next) => {
+    app.get(['/', '/:path*'], (req, res, next) => {
         // If it's an API route that wasn't matched, skip to 404
         if (req.path.startsWith('/api/')) return next();
         res.sendFile(path.join(distPath, 'index.html'));
