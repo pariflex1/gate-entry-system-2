@@ -44,4 +44,11 @@ copyRecursiveSync(path.join(__dirname, '..', 'client', 'dist'), clientDist);
 console.log('Copying index.html to dist root...');
 fs.copyFileSync(path.join(__dirname, '..', 'index.html'), path.join(distPath, 'index.html'));
 
+console.log('Generating _redirects for Cloudflare Pages handling...');
+const redirectsContent = `
+/client/* /client/index.html 200
+/admin/* /admin/index.html 200
+`.trim();
+fs.writeFileSync(path.join(distPath, '_redirects'), redirectsContent);
+
 console.log('Build preparation complete! ✅');
