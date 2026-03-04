@@ -19,15 +19,79 @@ const LOCKOUT_DURATION_MS = 10 * 60 * 1000; // 10 minutes
 router.post('/guard-login', async (req, res) => {
     try {
         const { mobile, pin, society_slug } = req.body;
-        if (!mobile || !pin || !society_slug) {
-            return res.status(400).json({ error: 'mobile, pin, and society_slug are required' });
+        if (!mobile || !pin) {
+            return res.status(400).json({ error: 'mobile and pin are required' });
         }
 
-        // Find society by slug
+        // 1. Gather potential guard records by mobile first
+        const { data: guards, error: guardsErr } = await insforge.database
+            .from('guards')
+            .select('id, name, mobile, pin_hash, active, society_id')
+            .eq('mobile', mobile);
+
+        if (guardsErr || !guards || guards.length === 0) {
+            return res.status(401).json({ error: 'Invalid mobile number or PIN' });
+        }
+
+        let matchedGuard = null;
+        let validPinFound = false;
+
+        // 2. Find the first guard record with a matching pin and active status
+        for (const g of guards) {
+            if (!g.active) continue;
+
+            // Check lockout for this specific society
+            const lockoutKey = `${g.society_id}:${mobile}`;
+            const lockout = guardLockouts[lockoutKey];
+            if (lockout && lockout.lockedUntil && Date.now() < lockout.lockedUntil) {
+                continue; // Try next if locked out of this one
+            }
+
+            const validPin = await bcrypt.compare(pin, g.pin_hash);
+            if (validPin) {
+                // If society_slug is provided and not generic, it must match
+                if (society_slug && society_slug !== 'entry') {
+                    // We need to fetch the society to check its slug
+                    const { data: socCheck } = await insforge.database
+                        .from('societies')
+                        .select('slug')
+                        .eq('id', g.society_id)
+                        .single();
+
+                    if (!socCheck || socCheck.slug !== society_slug) {
+                        continue; // Wrong society context
+                    }
+                }
+
+                matchedGuard = g;
+                validPinFound = true;
+                break;
+            } else {
+                // Register failed attempt
+                if (!guardLockouts[lockoutKey]) guardLockouts[lockoutKey] = { attempts: 0, lockedUntil: null };
+                guardLockouts[lockoutKey].attempts += 1;
+                if (guardLockouts[lockoutKey].attempts >= LOCKOUT_ATTEMPTS) {
+                    guardLockouts[lockoutKey].lockedUntil = Date.now() + LOCKOUT_DURATION_MS;
+                }
+            }
+        }
+
+        if (!matchedGuard) {
+            if (validPinFound) {
+                return res.status(403).json({ error: 'Your account has been deactivated or wrong society context.' });
+            }
+            return res.status(401).json({ error: 'Invalid mobile number or PIN' });
+        }
+
+        const society_id = matchedGuard.society_id;
+        const lockoutKey = `${society_id}:${mobile}`;
+        delete guardLockouts[lockoutKey];
+
+        // 3. Check society status
         const { data: society, error: socErr } = await insforge.database
             .from('societies')
-            .select('id, status, admin_id')
-            .eq('slug', society_slug)
+            .select('id, slug, status, admin_id')
+            .eq('id', society_id)
             .single();
 
         if (socErr || !society) {
@@ -37,7 +101,7 @@ router.post('/guard-login', async (req, res) => {
             return res.status(403).json({ error: 'This society has been suspended' });
         }
 
-        // Check society owner (admin) status
+        // 4. Check society owner (admin) status
         const { data: admin } = await insforge.database
             .from('users')
             .select('status')
@@ -48,57 +112,9 @@ router.post('/guard-login', async (req, res) => {
             return res.status(403).json({ error: 'The society administrator is not active' });
         }
 
-        const society_id = society.id;
-
-        // Check lockout
-        const lockoutKey = `${society_id}:${mobile}`;
-        const lockout = guardLockouts[lockoutKey];
-        if (lockout && lockout.lockedUntil && Date.now() < lockout.lockedUntil) {
-            const remainingSec = Math.ceil((lockout.lockedUntil - Date.now()) / 1000);
-            return res.status(429).json({
-                error: `Too many attempts. Try again in ${remainingSec} seconds.`,
-                lockedUntil: lockout.lockedUntil,
-            });
-        }
-
-        // Find guard
-        const { data: guard, error: guardErr } = await insforge.database
-            .from('guards')
-            .select('id, name, mobile, pin_hash, active')
-            .eq('society_id', society_id)
-            .eq('mobile', mobile)
-            .single();
-
-        if (guardErr || !guard) {
-            if (!guardLockouts[lockoutKey]) guardLockouts[lockoutKey] = { attempts: 0, lockedUntil: null };
-            guardLockouts[lockoutKey].attempts += 1;
-            if (guardLockouts[lockoutKey].attempts >= LOCKOUT_ATTEMPTS) {
-                guardLockouts[lockoutKey].lockedUntil = Date.now() + LOCKOUT_DURATION_MS;
-            }
-            return res.status(401).json({ error: 'Invalid mobile number or PIN' });
-        }
-
-        if (!guard.active) {
-            return res.status(403).json({ error: 'Your account has been deactivated. Contact your admin.' });
-        }
-
-        // Verify PIN
-        const validPin = await bcrypt.compare(pin, guard.pin_hash);
-        if (!validPin) {
-            if (!guardLockouts[lockoutKey]) guardLockouts[lockoutKey] = { attempts: 0, lockedUntil: null };
-            guardLockouts[lockoutKey].attempts += 1;
-            if (guardLockouts[lockoutKey].attempts >= LOCKOUT_ATTEMPTS) {
-                guardLockouts[lockoutKey].lockedUntil = Date.now() + LOCKOUT_DURATION_MS;
-            }
-            return res.status(401).json({ error: 'Invalid mobile number or PIN' });
-        }
-
-        // Clear lockout on success
-        delete guardLockouts[lockoutKey];
-
         // Issue JWT
         const token = jwt.sign(
-            { role: 'guard', guard_id: guard.id, society_id },
+            { role: 'guard', guard_id: matchedGuard.id, society_id },
             process.env.JWT_SECRET,
             { expiresIn: '12h' }
         );
@@ -106,14 +122,14 @@ router.post('/guard-login', async (req, res) => {
         // Log guard activity
         await insforge.database.from('guard_activity').insert({
             society_id,
-            guard_id: guard.id,
+            guard_id: matchedGuard.id,
             action: 'LOGIN',
-            detail: `Guard ${guard.name} logged in`,
+            detail: `Guard ${matchedGuard.name} logged in`,
         });
 
         return res.json({
             token,
-            guard: { id: guard.id, name: guard.name, mobile: guard.mobile, society_slug },
+            guard: { id: matchedGuard.id, name: matchedGuard.name, mobile: matchedGuard.mobile, society_slug: society.slug },
             society_id,
         });
     } catch (error) {
