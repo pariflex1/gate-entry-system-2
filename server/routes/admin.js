@@ -162,7 +162,19 @@ router.put('/account', async (req, res) => {
                 .eq('id', req.admin_id)
                 .single();
 
-            const validCurrent = await bcrypt.compare(current_password, admin.password_hash);
+            let validCurrent = false;
+            if (admin.password_hash) {
+                validCurrent = await bcrypt.compare(current_password, admin.password_hash);
+            } else {
+                const { data: userData } = await insforge.database.from('users').select('email').eq('id', req.admin_id).single();
+                if (userData) {
+                    const { error: authErr } = await insforge.auth.signInWithPassword({
+                        email: userData.email,
+                        password: current_password
+                    });
+                    if (!authErr) validCurrent = true;
+                }
+            }
             if (!validCurrent) {
                 return res.status(401).json({ error: 'Current password is incorrect' });
             }

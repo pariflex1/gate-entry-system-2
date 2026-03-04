@@ -315,7 +315,17 @@ router.post('/admin-login', async (req, res) => {
         }
 
         // Verify password
-        const validPassword = await bcrypt.compare(password, admin.password_hash);
+        let validPassword = false;
+        if (admin.password_hash) {
+            validPassword = await bcrypt.compare(password, admin.password_hash);
+        } else {
+            const { error: authErr } = await insforge.auth.signInWithPassword({
+                email: email.toLowerCase(),
+                password
+            });
+            if (!authErr) validPassword = true;
+        }
+
         if (!validPassword) {
             return res.status(401).json({ error: 'Invalid email or password' });
         }
