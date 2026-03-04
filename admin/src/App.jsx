@@ -58,7 +58,7 @@ function Sidebar({ isOpen, onClose, selectedSociety, onSwitchSociety }) {
               localStorage.removeItem('admin_data');
               localStorage.removeItem('selected_society_id');
               localStorage.removeItem('selected_society_data');
-              window.location.href = '/login';
+              window.location.href = '/admin/login';
             }
           }}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -134,7 +134,7 @@ export default function App() {
   };
 
   return (
-    <BrowserRouter>
+    <BrowserRouter basename="/admin">
       {isLoggedIn ? (
         selectedSociety ? (
           <AdminApp selectedSociety={selectedSociety} onSwitchSociety={handleSwitchSociety} />

@@ -59,7 +59,7 @@ function NavBar() {
             localStorage.removeItem('guard_token');
             localStorage.removeItem('guard_data');
             localStorage.removeItem('society_id');
-            window.location.href = '/';
+            window.location.href = '/client/';
           }
         }}
         style={{ border: 'none', background: 'none', cursor: 'pointer' }}
@@ -106,7 +106,7 @@ export default function App() {
   const handleLogin = () => setIsLoggedIn(true);
 
   return (
-    <BrowserRouter>
+    <BrowserRouter basename="/client">
       {isLoggedIn ? (
         <GuardApp />
       ) : (

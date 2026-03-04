@@ -22,7 +22,7 @@ api.interceptors.response.use(
         if (error.response?.status === 401) {
             localStorage.removeItem('guard_token');
             localStorage.removeItem('guard_data');
-            window.location.href = '/';
+            window.location.href = '/client/';
         }
         return Promise.reject(error);
     }
