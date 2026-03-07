@@ -13,7 +13,7 @@ export default function Dashboard({ society }) {
     }, []);
 
     const guardAppLink = window.location.hostname === 'localhost'
-        ? `http://localhost:5173/?slug=${society?.slug}`
+        ? `${window.location.origin}/client/${society?.slug}`
         : `https://${society?.slug}.jhansiproperty.com`;
 
     if (loading) return (

@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-    baseURL: '/api',
+    baseURL: import.meta.env.VITE_API_URL || '/api',
     timeout: 15000,
     headers: { 'Content-Type': 'application/json' },
 });
@@ -19,7 +19,7 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
     (r) => r,
     (error) => {
-        if (error.response?.status === 401) {
+        if (error.response?.status === 401 && !error.config?.url?.includes('/auth/')) {
             localStorage.removeItem('admin_token');
             localStorage.removeItem('admin_data');
             window.location.href = '/admin/login';

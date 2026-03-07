@@ -26,11 +26,11 @@ router.post('/', async (req, res) => {
             return res.status(400).json({ error: 'entry_method must be QR or MOBILE' });
         }
 
-        // Dedup check for offline sync: skip if same person + entry_time within 60 seconds
+        // Dedup check for offline sync: skip if same person + entry_time within 5 seconds
         if (entry_time) {
             const entryDate = new Date(entry_time);
-            const minTime = new Date(entryDate.getTime() - 60000).toISOString();
-            const maxTime = new Date(entryDate.getTime() + 60000).toISOString();
+            const minTime = new Date(entryDate.getTime() - 5000).toISOString();
+            const maxTime = new Date(entryDate.getTime() + 5000).toISOString();
 
             const { data: existing } = await insforge.database
                 .from('gate_entries')
@@ -63,21 +63,9 @@ router.post('/', async (req, res) => {
             entryData.synced_at = synced_at || new Date().toISOString();
         }
 
-        // Prevent double IN entries for the same person
-        if (entry_type === 'IN') {
-            const { data: latestEntry } = await insforge.database
-                .from('gate_entries')
-                .select('entry_type')
-                .eq('society_id', req.society_id)
-                .eq('person_id', person_id)
-                .order('entry_time', { ascending: false })
-                .limit(1)
-                .maybeSingle();
+        // NOTE: We used to block multiple 'IN' entries here, but it's been removed so 
+        // guards can freely update a visitor's info with a new 'IN' entry if needed.
 
-            if (latestEntry && latestEntry.entry_type === 'IN') {
-                return res.status(409).json({ error: 'This person is already inside. Must record OUT entry before entering again.' });
-            }
-        }
 
         const { data: entry, error } = await insforge.database
             .from('gate_entries')
@@ -195,7 +183,7 @@ router.get('/inside', async (req, res) => {
         if (vehicleIds.length > 0) {
             const { data } = await insforge.database
                 .from('person_vehicles')
-                .select('id, vehicle_photo_url')
+                .select('id, vehicle_number, vehicle_photo_url')
                 .in('id', vehicleIds);
             vehicles = data || [];
         }
@@ -212,6 +200,7 @@ router.get('/inside', async (req, res) => {
             person_mobile: personMap[e.person_id]?.mobile || '',
             person_photo_url: personMap[e.person_id]?.person_photo_url || null,
             vehicle_photo_url: e.vehicle_id ? vehicleMap[e.vehicle_id]?.vehicle_photo_url || null : null,
+            vehicle_number: e.vehicle_id ? vehicleMap[e.vehicle_id]?.vehicle_number || null : null,
         }));
 
         return res.json(result);
@@ -258,7 +247,7 @@ router.get('/history', async (req, res) => {
         if (vehicleIds.length > 0) {
             const { data } = await insforge.database
                 .from('person_vehicles')
-                .select('id, vehicle_photo_url')
+                .select('id, vehicle_number, vehicle_photo_url')
                 .in('id', vehicleIds);
             vehicles = data || [];
         }
@@ -289,6 +278,7 @@ router.get('/history', async (req, res) => {
             person_mobile: personMap[e.person_id]?.mobile || '',
             person_photo_url: personMap[e.person_id]?.person_photo_url || null,
             vehicle_photo_url: e.vehicle_id ? vehicleMap[e.vehicle_id]?.vehicle_photo_url || null : null,
+            vehicle_number: e.vehicle_id ? vehicleMap[e.vehicle_id]?.vehicle_number || null : null,
             guard_name: guardMap[e.guard_id]?.name || 'Unknown Guard',
         }));
 

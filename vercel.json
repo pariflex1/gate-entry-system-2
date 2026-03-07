@@ -10,6 +10,18 @@
         {
             "src": "/api/(.*)",
             "dest": "server/index.js"
+        },
+        {
+            "src": "/admin(.*)",
+            "dest": "server/index.js"
+        },
+        {
+            "src": "/client(.*)",
+            "dest": "server/index.js"
+        },
+        {
+            "src": "/(.*)",
+            "dest": "server/index.js"
         }
     ]
 }

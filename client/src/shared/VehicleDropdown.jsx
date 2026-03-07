@@ -1,12 +1,23 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import api from '../services/api';
 
-export default function VehicleDropdown({ personId, vehicles, societyId, onSelect, onVehiclesUpdate }) {
+export default function VehicleDropdown({ personId, vehicles, societyId, onSelect, onVehiclesUpdate, preloadedVehicles = [] }) {
     const [showAddNew, setShowAddNew] = useState(false);
     const [selectedId, setSelectedId] = useState('');
     const [newNumber, setNewNumber] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    
+    const allVehicles = preloadedVehicles.length > 0 ? preloadedVehicles : vehicles;
+    const canAddVehicle = personId !== null && personId !== undefined;
+
+    // Auto-select first vehicle when vehicles are loaded
+    useEffect(() => {
+        if (allVehicles.length > 0 && !selectedId) {
+            setSelectedId(allVehicles[0].id);
+            onSelect(allVehicles[0]);
+        }
+    }, [allVehicles, selectedId, onSelect]);
 
     // Auto-format vehicle number: uppercase + hyphens at positions 3, 6, 9
     const formatVehicleNumber = (val) => {
@@ -56,6 +67,7 @@ export default function VehicleDropdown({ personId, vehicles, societyId, onSelec
                     className="input-field"
                     style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', paddingRight: '16px' }}
                     onClick={() => {
+                        if (!canAddVehicle) return;
                         const nextSelect = selectedId === 'add_new' ? '' : 'add_new';
                         setSelectedId(nextSelect);
                         if (nextSelect === 'add_new') {
@@ -68,7 +80,7 @@ export default function VehicleDropdown({ personId, vehicles, societyId, onSelec
                         {selectedId === '' && 'No vehicle'}
                         {selectedId === 'add_new' && '➕ Add New Vehicle'}
                         {selectedId && selectedId !== 'add_new' && (() => {
-                            const v = vehicles.find(v => v.id === selectedId);
+                            const v = allVehicles.find(v => v.id === selectedId);
                             if (!v) return 'No vehicle';
                             return (
                                 <>
@@ -96,23 +108,23 @@ export default function VehicleDropdown({ personId, vehicles, societyId, onSelec
                             onSelect(null);
                             setShowAddNew(false);
                         } else {
-                            const v = vehicles.find((v) => v.id === e.target.value);
+                            const v = allVehicles.find((v) => v.id === e.target.value);
                             onSelect(v);
                             setShowAddNew(false);
                         }
                     }}
                 >
                     <option value="">No vehicle</option>
-                    {vehicles.map((v) => (
+                    {allVehicles.map((v) => (
                         <option key={v.id} value={v.id}>
                             {v.vehicle_number}
                         </option>
                     ))}
-                    <option value="add_new">➕ Add New Vehicle</option>
+                    {canAddVehicle && <option value="add_new">➕ Add New Vehicle</option>}
                 </select>
             </div>
 
-            {showAddNew && (
+            {showAddNew && canAddVehicle && (
                 <div style={{ marginTop: 10, display: 'flex', gap: 8, alignItems: 'flex-start', flexWrap: 'wrap' }}>
                     <div style={{ flex: 1, minWidth: 200 }}>
                         <input

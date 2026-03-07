@@ -16,14 +16,18 @@ export function useSociety() {
             } catch (e) { /* ignore */ }
         }
 
-        const hostname = window.location.hostname;
-        // ... (rest as before)
+        // Dev/Production: check URL path (e.g. /client/mysociety)
+        // If basename is /client, pathname after basename might be /mysociety
+        const pathParts = window.location.pathname.replace(/^\/client/, '').split('/').filter(Boolean);
+        if (pathParts.length > 0 && !['entry', 'inside', 'assign-qr', 'history', 'switch-society'].includes(pathParts[0])) {
+            return pathParts[0];
+        }
 
         // Production: extract slug from subdomain
-        if (hostname.endsWith('.jhansiproperty.com')) {
-            const parts = hostname.split('.');
+        if (window.location.hostname.endsWith('.jhansiproperty.com')) {
+            const parts = window.location.hostname.split('.');
             // e.g. ['societyx', 'jhansiproperty', 'com']
-            if (parts.length >= 3) {
+            if (parts.length >= 3 && parts[0] !== 'entry' && parts[0] !== 'admin') {
                 return parts[0];
             }
         }
@@ -33,7 +37,7 @@ export function useSociety() {
         const slugParam = params.get('slug');
         if (slugParam) return slugParam;
 
-        // Dev: check localStorage
+        // Dev: check localStorage (manual override)
         const stored = localStorage.getItem('dev_society_slug');
         if (stored) return stored;
 

@@ -70,7 +70,7 @@ export default function CurrentlyInside({ toast }) {
                                 <div style={{ flex: 1 }}>
                                     <div style={{ fontWeight: 700, fontSize: '1rem' }}>{e.person_name}</div>
                                     <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: 2 }}>
-                                        {e.unit || 'No unit'} • {e.entry_method}
+                                        {e.unit || 'No unit'} {e.vehicle_number ? ` • 🚗 ${e.vehicle_number}` : ''} • {e.entry_method}
                                     </div>
                                     <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: 2 }}>
                                         In since: {format(new Date(e.entry_time), 'hh:mm a')}

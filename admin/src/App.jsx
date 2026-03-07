@@ -56,6 +56,7 @@ function Sidebar({ isOpen, onClose, selectedSociety, onSwitchSociety }) {
             if (window.confirm("Are you sure you want to logout?")) {
               localStorage.removeItem('admin_token');
               localStorage.removeItem('admin_data');
+              localStorage.removeItem('admin_societies');
               localStorage.removeItem('selected_society_id');
               localStorage.removeItem('selected_society_data');
               window.location.href = '/admin/login';
@@ -117,8 +118,13 @@ export default function App() {
     }
   }, []);
 
-  const handleLogin = () => {
+  const handleLogin = (loginData) => {
     setIsLoggedIn(true);
+    // Auto-select society if already stored from login response
+    const societyData = localStorage.getItem('selected_society_data');
+    if (societyData) {
+      setSelectedSociety(JSON.parse(societyData));
+    }
   };
 
   const handleSelectSociety = (society) => {

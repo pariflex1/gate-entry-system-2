@@ -2,8 +2,6 @@ const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const insforge = require('../services/insforge');
-const { sendPasswordResetEmail, sendApprovalRequest, sendAdminSignupNotification } = require('../services/email');
-const { notifySuperAdmin } = require('../services/whatsapp');
 
 const router = express.Router();
 
@@ -51,7 +49,6 @@ router.post('/guard-login', async (req, res) => {
             if (validPin) {
                 // If society_slug is provided and not generic, it must match
                 if (society_slug && society_slug !== 'entry') {
-                    // We need to fetch the society to check its slug
                     const { data: socCheck } = await insforge.database
                         .from('societies')
                         .select('slug')
@@ -87,10 +84,10 @@ router.post('/guard-login', async (req, res) => {
         const lockoutKey = `${society_id}:${mobile}`;
         delete guardLockouts[lockoutKey];
 
-        // 3. Check society status
+        // 3. Check society status (no user_profile needed)
         const { data: society, error: socErr } = await insforge.database
             .from('societies')
-            .select('id, slug, status, admin_id')
+            .select('id, slug, status')
             .eq('id', society_id)
             .single();
 
@@ -99,17 +96,6 @@ router.post('/guard-login', async (req, res) => {
         }
         if (society.status === 'suspended') {
             return res.status(403).json({ error: 'This society has been suspended' });
-        }
-
-        // 4. Check society owner (admin) status
-        const { data: admin } = await insforge.database
-            .from('users')
-            .select('status')
-            .eq('id', society.admin_id)
-            .single();
-
-        if (!admin || admin.status !== 'active') {
-            return res.status(403).json({ error: 'The society administrator is not active' });
         }
 
         // Issue JWT
@@ -185,113 +171,36 @@ router.get('/my-societies', async (req, res) => {
 
 /**
  * POST /api/auth/admin-register
- * Body: { email, password, name, mobile, society_name, society_address }
- * Uses InsForge auth.signUp for email/password, creates a users row + society row.
+ * Body: { email, password }
+ * Simple signup — just email/password. Society is created after first login.
  */
 router.post('/admin-register', async (req, res) => {
     try {
-        const { email, password, name, mobile, society_name, society_address } = req.body;
+        const { email, password } = req.body;
 
-        if (!email || !password || !name || !mobile || !society_name) {
-            return res.status(400).json({ error: 'All fields (email, password, name, mobile, society_name) are required' });
+        if (!email || !password) {
+            return res.status(400).json({ error: 'Email and password are required' });
         }
         if (password.length < 8) {
             return res.status(400).json({ error: 'Password must be at least 8 characters' });
         }
-        if (society_name.length < 3) {
-            return res.status(400).json({ error: 'Society name must be at least 3 characters' });
-        }
 
-        // Check email uniqueness in users table
-        const { data: existingUser } = await insforge.database
-            .from('users')
-            .select('id')
-            .eq('email', email.toLowerCase())
-            .maybeSingle();
-
-        if (existingUser) {
-            return res.status(409).json({ error: 'Email already registered' });
-        }
-
-        // Generate slug from society name
-        const slug = society_name
-            .toLowerCase()
-            .replace(/[^a-z0-9\s-]/g, '')
-            .replace(/\s+/g, '-')
-            .replace(/-+/g, '-')
-            .trim();
-
-        // Check slug uniqueness
-        const { data: existingSlug } = await insforge.database
-            .from('societies')
-            .select('id')
-            .eq('slug', slug)
-            .maybeSingle();
-
-        if (existingSlug) {
-            return res.status(409).json({ error: `Society slug "${slug}" already taken. Choose a different name.` });
-        }
-
-        // 1. Create auth user via InsForge signUp (email & password)
+        // Create auth user via InsForge signUp
         const { data: authData, error: authErr } = await insforge.auth.signUp({
             email: email.toLowerCase(),
             password,
-            name,
         });
 
         if (authErr) {
+            if (authErr.message && authErr.message.includes('already registered')) {
+                return res.status(409).json({ error: 'Email already registered' });
+            }
             console.error('InsForge signUp error:', authErr);
-            return res.status(500).json({ error: authErr.message || 'Failed to create auth account' });
+            return res.status(500).json({ error: authErr.message || 'Failed to create account' });
         }
-
-        const authUserId = authData?.user?.id || null;
-
-        // 2. Insert into users table with pending status
-        const { data: user, error: userErr } = await insforge.database
-            .from('users')
-            .insert({
-                email: email.toLowerCase(),
-                auth_user_id: authUserId,
-                name,
-                mobile,
-                status: 'pending',
-            })
-            .select()
-            .single();
-
-        if (userErr) {
-            console.error('Users table insert error:', userErr);
-            return res.status(500).json({ error: 'Failed to create account' });
-        }
-
-        // 3. Create society with pending status, linked to user
-        const { data: society, error: socErr } = await insforge.database
-            .from('societies')
-            .insert({
-                name: society_name,
-                slug,
-                address: society_address || null,
-                admin_id: user.id,
-                status: 'pending',
-            })
-            .select()
-            .single();
-
-        if (socErr) {
-            console.error('Society insert error:', socErr);
-            // Still return success — user was created, society can be created later
-        }
-
-        // 4. Notify super admin via email
-        await sendApprovalRequest(society_name, name, email, mobile);
-
-        // 5. Notify super admin via WhatsApp
-        await notifySuperAdmin(society_name, name, email, mobile);
 
         return res.status(201).json({
-            message: 'Registration successful! Your account is pending activation by the super admin.',
-            user: { id: user.id, email: user.email },
-            society: society ? { id: society.id, slug: society.slug } : null,
+            message: 'Registration successful! Please verify your email before logging in.',
         });
     } catch (error) {
         console.error('Admin register error:', error);
@@ -302,6 +211,7 @@ router.post('/admin-register', async (req, res) => {
 /**
  * POST /api/auth/admin-login
  * Body: { email, password }
+ * Returns auth user info + list of owned societies.
  */
 router.post('/admin-login', async (req, res) => {
     try {
@@ -310,55 +220,83 @@ router.post('/admin-login', async (req, res) => {
             return res.status(400).json({ error: 'Email and password are required' });
         }
 
-        const { data: admin, error } = await insforge.database
-            .from('users')
-            .select('id, name, email, password_hash, status, mobile')
-            .eq('email', email.toLowerCase())
-            .single();
+        // Authenticate via InsForge
+        const { data: authData, error: authErr } = await insforge.auth.signInWithPassword({
+            email: email.toLowerCase(),
+            password
+        });
 
-        if (error || !admin) {
+        if (authErr) {
             return res.status(401).json({ error: 'Invalid email or password' });
         }
 
-        // Check status — only active users can login
-        switch (admin.status) {
-            case 'pending':
-                return res.status(403).json({ error: 'Your account is awaiting activation. Please contact the administrator.' });
-            case 'rejected':
-                return res.status(403).json({ error: 'Your registration was rejected' });
-            case 'suspended':
-                return res.status(403).json({ error: 'Your account has been suspended' });
-        }
+        const authUserId = authData.user.id;
+        const userEmail = authData.user.email;
 
-        // Verify password
-        let validPassword = false;
-        if (admin.password_hash) {
-            validPassword = await bcrypt.compare(password, admin.password_hash);
-        } else {
-            const { error: authErr } = await insforge.auth.signInWithPassword({
-                email: email.toLowerCase(),
-                password
-            });
-            if (!authErr) validPassword = true;
-        }
+        // Fetch all societies owned by this user
+        const { data: societies } = await insforge.database
+            .from('societies')
+            .select('id, name, slug, address, status')
+            .eq('auth_user_id', authUserId)
+            .order('created_at', { ascending: false });
 
-        if (!validPassword) {
-            return res.status(401).json({ error: 'Invalid email or password' });
-        }
-
-        // Issue JWT
+        // Issue JWT (admin_id = auth.users.id)
         const token = jwt.sign(
-            { role: 'admin', admin_id: admin.id },
+            { role: 'admin', admin_id: authUserId },
             process.env.JWT_SECRET,
             { expiresIn: '8h' }
         );
 
         return res.json({
             token,
-            admin: { id: admin.id, name: admin.name, email: admin.email, mobile: admin.mobile },
+            admin: { id: authUserId, email: userEmail },
+            societies: societies || [],
         });
     } catch (error) {
         console.error('Admin login error:', error);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+/**
+ * POST /api/auth/social-login
+ * Body: { access_token }
+ */
+router.post('/social-login', async (req, res) => {
+    try {
+        const { access_token } = req.body;
+        if (!access_token) return res.status(400).json({ error: 'Token missing' });
+
+        // Get user from access token
+        const { data: userData, error: userError } = await insforge.auth.getUser(access_token);
+        if (userError || !userData || !userData.user) {
+            return res.status(401).json({ error: 'Invalid social token' });
+        }
+
+        const userEmail = userData.user.email.toLowerCase();
+        const authUserId = userData.user.id;
+
+        // Fetch societies owned by this auth user
+        const { data: societies } = await insforge.database
+            .from('societies')
+            .select('id, name, slug, address, status')
+            .eq('auth_user_id', authUserId)
+            .order('created_at', { ascending: false });
+
+        // Issue our app JWT
+        const token = jwt.sign(
+            { role: 'admin', admin_id: authUserId },
+            process.env.JWT_SECRET,
+            { expiresIn: '8h' }
+        );
+
+        return res.json({
+            token,
+            admin: { id: authUserId, email: userEmail },
+            societies: societies || [],
+        });
+    } catch (error) {
+        console.error('Social login error:', error);
         return res.status(500).json({ error: 'Internal server error' });
     }
 });
@@ -372,69 +310,13 @@ router.post('/forgot-password', async (req, res) => {
         const { email } = req.body;
         if (!email) return res.status(400).json({ error: 'Email is required' });
 
-        const { data: admin } = await insforge.database
-            .from('users')
-            .select('id, name, email')
-            .eq('email', email.toLowerCase())
-            .maybeSingle();
-
-        // Always return success to prevent email enumeration
-        if (!admin) {
-            return res.json({ message: 'If an account exists with that email, a reset link has been sent.' });
-        }
-
-        const resetToken = jwt.sign(
-            { admin_id: admin.id, email: admin.email, type: 'password_reset' },
-            process.env.JWT_SECRET,
-            { expiresIn: '1h' }
-        );
-        await sendPasswordResetEmail(admin.email, admin.name, resetToken);
+        await insforge.auth.sendResetPasswordEmail(email.toLowerCase(), {
+            redirectTo: `${process.env.CLIENT_URL || 'http://localhost:5174/admin'}/reset-password`,
+        });
 
         return res.json({ message: 'If an account exists with that email, a reset link has been sent.' });
     } catch (error) {
         console.error('Forgot password error:', error);
-        return res.status(500).json({ error: 'Internal server error' });
-    }
-});
-
-/**
- * POST /api/auth/reset-password
- * Body: { token, password }
- */
-router.post('/reset-password', async (req, res) => {
-    try {
-        const { token, password } = req.body;
-        if (!token || !password) {
-            return res.status(400).json({ error: 'Token and new password are required' });
-        }
-        if (password.length < 8) {
-            return res.status(400).json({ error: 'Password must be at least 8 characters' });
-        }
-
-        let decoded;
-        try {
-            decoded = jwt.verify(token, process.env.JWT_SECRET);
-        } catch {
-            return res.status(400).json({ error: 'Invalid or expired reset link. Please request a new one.' });
-        }
-
-        if (decoded.type !== 'password_reset') {
-            return res.status(400).json({ error: 'Invalid token type' });
-        }
-
-        const password_hash = await bcrypt.hash(password, 12);
-        const { error } = await insforge.database
-            .from('users')
-            .update({ password_hash })
-            .eq('id', decoded.admin_id);
-
-        if (error) {
-            return res.status(500).json({ error: 'Failed to reset password' });
-        }
-
-        return res.json({ message: 'Password reset successfully. You can now login with your new password.' });
-    } catch (error) {
-        console.error('Reset password error:', error);
         return res.status(500).json({ error: 'Internal server error' });
     }
 });

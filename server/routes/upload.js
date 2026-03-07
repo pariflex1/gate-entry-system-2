@@ -10,8 +10,33 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 *
 router.use(authenticate, checkSocietyActive);
 
 /**
+ * Compress image to WebP < 50KB
+ */
+async function compressToWebP(buffer) {
+    let finalBuffer = await sharp(buffer)
+        .webp({ quality: 80 })
+        .resize({ width: 1024, withoutEnlargement: true })
+        .toBuffer();
+
+    if (finalBuffer.length > 50 * 1024) {
+        finalBuffer = await sharp(buffer)
+            .webp({ quality: 50 })
+            .resize({ width: 800, withoutEnlargement: true })
+            .toBuffer();
+    }
+    if (finalBuffer.length > 50 * 1024) {
+        finalBuffer = await sharp(buffer)
+            .webp({ quality: 30 })
+            .resize({ width: 640, withoutEnlargement: true })
+            .toBuffer();
+    }
+    return finalBuffer;
+}
+
+/**
  * POST /api/upload/person/:person_id
  * Upload and compress a person photo to WebP < 50KB
+ * Updates the GLOBAL known_persons record
  */
 router.post('/person/:person_id', upload.single('photo'), async (req, res) => {
     try {
@@ -20,30 +45,10 @@ router.post('/person/:person_id', upload.single('photo'), async (req, res) => {
         }
 
         const personId = req.params.person_id;
-        const societyId = req.society_id;
+        const finalBuffer = await compressToWebP(req.file.buffer);
 
-        // Convert to WebP < 50KB
-        const webpBuffer = await sharp(req.file.buffer)
-            .webp({ quality: 80 })
-            .resize({ width: 1024, withoutEnlargement: true })
-            .toBuffer();
-
-        // Check size — if still > 50KB, reduce quality
-        let finalBuffer = webpBuffer;
-        if (webpBuffer.length > 50 * 1024) {
-            finalBuffer = await sharp(req.file.buffer)
-                .webp({ quality: 50 })
-                .resize({ width: 800, withoutEnlargement: true })
-                .toBuffer();
-        }
-        if (finalBuffer.length > 50 * 1024) {
-            finalBuffer = await sharp(req.file.buffer)
-                .webp({ quality: 30 })
-                .resize({ width: 640, withoutEnlargement: true })
-                .toBuffer();
-        }
-
-        const filePath = `${societyId}/persons/${personId}/person.webp`;
+        // Use personId in the path (global, not society-scoped)
+        const filePath = `persons/${personId}/person.webp`;
         const blob = new Blob([finalBuffer], { type: 'image/webp' });
 
         const { data, error } = await insforge.storage
@@ -55,7 +60,7 @@ router.post('/person/:person_id', upload.single('photo'), async (req, res) => {
             return res.status(500).json({ error: 'Failed to upload photo' });
         }
 
-        // Update person_photo_url
+        // Update GLOBAL person_photo_url
         const photoUrl = data.url;
         await insforge.database
             .from('known_persons')
@@ -72,6 +77,7 @@ router.post('/person/:person_id', upload.single('photo'), async (req, res) => {
 /**
  * POST /api/upload/vehicle/:vehicle_id
  * Upload and compress a vehicle photo to WebP < 50KB
+ * Updates the GLOBAL person_vehicles record
  */
 router.post('/vehicle/:vehicle_id', upload.single('photo'), async (req, res) => {
     try {
@@ -80,41 +86,10 @@ router.post('/vehicle/:vehicle_id', upload.single('photo'), async (req, res) => 
         }
 
         const vehicleId = req.params.vehicle_id;
-        const societyId = req.society_id;
+        const finalBuffer = await compressToWebP(req.file.buffer);
 
-        // Get person_id for this vehicle
-        const { data: vehicle } = await insforge.database
-            .from('person_vehicles')
-            .select('person_id')
-            .eq('id', vehicleId)
-            .eq('society_id', societyId)
-            .single();
-
-        if (!vehicle) {
-            return res.status(404).json({ error: 'Vehicle not found' });
-        }
-
-        // Convert to WebP < 50KB
-        const webpBuffer = await sharp(req.file.buffer)
-            .webp({ quality: 80 })
-            .resize({ width: 1024, withoutEnlargement: true })
-            .toBuffer();
-
-        let finalBuffer = webpBuffer;
-        if (webpBuffer.length > 50 * 1024) {
-            finalBuffer = await sharp(req.file.buffer)
-                .webp({ quality: 50 })
-                .resize({ width: 800, withoutEnlargement: true })
-                .toBuffer();
-        }
-        if (finalBuffer.length > 50 * 1024) {
-            finalBuffer = await sharp(req.file.buffer)
-                .webp({ quality: 30 })
-                .resize({ width: 640, withoutEnlargement: true })
-                .toBuffer();
-        }
-
-        const filePath = `${societyId}/persons/${vehicle.person_id}/vehicles/${vehicleId}.webp`;
+        // Use vehicleId in the path (global, not society-scoped)
+        const filePath = `vehicles/${vehicleId}/vehicle.webp`;
         const blob = new Blob([finalBuffer], { type: 'image/webp' });
 
         const { data, error } = await insforge.storage
@@ -126,7 +101,7 @@ router.post('/vehicle/:vehicle_id', upload.single('photo'), async (req, res) => 
             return res.status(500).json({ error: 'Failed to upload photo' });
         }
 
-        // Update vehicle_photo_url
+        // Update GLOBAL vehicle_photo_url
         const photoUrl = data.url;
         await insforge.database
             .from('person_vehicles')

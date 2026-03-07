@@ -18,7 +18,7 @@ function authenticate(req, res, next) {
         req.user = decoded;
         req.role = decoded.role;
         req.guard_id = decoded.guard_id || null;
-        req.admin_id = decoded.admin_id || null;
+        req.admin_id = decoded.admin_id || null; // This is now auth.users.id
 
         // society_id can come from JWT (guards) or header (admins)
         req.society_id = decoded.society_id || req.headers['x-society-id'];
@@ -58,28 +58,18 @@ function adminOnly(req, res, next) {
 /**
  * Check if the society is active (not suspended)
  * Must be used AFTER authenticate
+ * Ownership is verified via societies.auth_user_id
  */
 async function checkSocietyActive(req, res, next) {
     try {
         if (!req.society_id) {
-            // If no society_id, we can only check user status
-            if (req.admin_id) {
-                const { data: user } = await insforge.database
-                    .from('users')
-                    .select('status')
-                    .eq('id', req.admin_id)
-                    .single();
-                if (!user || user.status !== 'active') {
-                    return res.status(403).json({ error: 'User account is not active' });
-                }
-                return next();
-            }
-            return res.status(400).json({ error: 'Society selection required' });
+            // No society selected yet — allow through (admin may be setting up)
+            return next();
         }
 
         const { data: society, error } = await insforge.database
             .from('societies')
-            .select('status, admin_id')
+            .select('status, auth_user_id')
             .eq('id', req.society_id)
             .single();
 
@@ -88,23 +78,12 @@ async function checkSocietyActive(req, res, next) {
         }
 
         // Security Check: If admin, verify ownership
-        if (req.role === 'admin' && society.admin_id !== req.admin_id) {
+        if (req.role === 'admin' && society.auth_user_id !== req.admin_id) {
             return res.status(403).json({ error: 'Permission denied: You do not own this society' });
         }
 
         if (society.status !== 'active') {
             return res.status(403).json({ error: 'Society is not active' });
-        }
-
-        // Also check owner status
-        const { data: user } = await insforge.database
-            .from('users')
-            .select('status')
-            .eq('id', society.admin_id)
-            .single();
-
-        if (!user || user.status !== 'active') {
-            return res.status(403).json({ error: 'Society owner is not active' });
         }
 
         next();

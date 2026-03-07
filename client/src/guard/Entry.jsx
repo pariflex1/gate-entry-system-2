@@ -20,6 +20,8 @@ export default function Entry({ toast }) {
     const [scannedQR, setScannedQR] = useState('');
     const [selectedVehicle, setSelectedVehicle] = useState(null);
     const [newVehicleNumber, setNewVehicleNumber] = useState('');
+    const [searchingVehicle, setSearchingVehicle] = useState(false);
+    const [globalVehicle, setGlobalVehicle] = useState(null);
     const [units, setUnits] = useState([]);
     const [personPhoto, setPersonPhoto] = useState(null);
     const [vehiclePhoto, setVehiclePhoto] = useState(null);
@@ -110,17 +112,17 @@ export default function Entry({ toast }) {
         }
     };
 
-    // Search person by mobile
+    // Search person by mobile (global search across all societies)
     const searchPerson = useCallback(async (mob) => {
         if (mob.length !== 10) return;
         setSearching(true);
         try {
-            const res = await api.get(`/persons/search?mobile=${mob}`);
+            const res = await api.get(`/persons/search-global?mobile=${mob}`);
             if (res.data.found) {
                 const p = res.data.person;
-                setPersonId(p.id);
                 setName(p.name);
                 setUnit(p.unit || '');
+                setPersonId(p.id);
                 setVehicles(res.data.vehicles || []);
                 setPersonPhotoUrl(p.person_photo_url);
                 setIsKnown(true);
@@ -137,6 +139,27 @@ export default function Entry({ toast }) {
             setSearching(false);
         }
     }, [toast]);
+
+    // Search vehicle globally when full number is entered
+    const searchGlobalVehicle = useCallback(async (vehicleNumber) => {
+        const regex = /^[A-Z]{2}-[0-9]{2}-[A-Z]{2}-[0-9]{4}$/;
+        if (!regex.test(vehicleNumber)) return;
+
+        setSearchingVehicle(true);
+        try {
+            const res = await api.get(`/persons/vehicles/search?vehicle_number=${vehicleNumber}`);
+            if (res.data.found) {
+                setGlobalVehicle(res.data.vehicle);
+                setSelectedVehicle(res.data.vehicle);
+            } else {
+                setGlobalVehicle(null);
+            }
+        } catch {
+            // Search failed - ignore
+        } finally {
+            setSearchingVehicle(false);
+        }
+    }, []);
 
     // Upload person photo
     const uploadPersonPhoto = async (pid, file) => {
@@ -179,26 +202,27 @@ export default function Entry({ toast }) {
         try {
             const finalUnit = unit === 'Other' ? customUnit : unit;
 
-            // Step 1: Create/update person
-            let pid = personId;
-            if (!pid) {
-                const personRes = await api.post('/persons', { name, mobile, unit: finalUnit });
-                pid = personRes.data.person.id;
-                setPersonId(pid);
-            }
+            // Step 1: Always upsert person (updates name globally, unit per-society)
+            const personRes = await api.post('/persons', { name, mobile, unit: finalUnit });
+            const pid = personRes.data.person.id;
+            setPersonId(pid);
 
-            // Step 2.5: Handle new vehicle for new person
-            let vid = selectedVehicle?.id || null;
-            if (!vid && newVehicleNumber) {
+            // Step 2: Handle vehicle
+            let vid = selectedVehicle?.id || globalVehicle?.id || null;
+
+            if (newVehicleNumber) {
+                // Because they typed a new vehicle number, we MUST call the API
+                // to link this vehicle to the person. The backend will handle whether
+                // it needs to create a new vehicle or just link the global one.
                 const vRes = await api.post(`/persons/${pid}/vehicles`, { vehicle_number: newVehicleNumber });
                 vid = vRes.data.vehicle.id;
             }
 
-            // Step 2.7: Upload photos if captured
+            // Step 3: Upload photos if captured (updates globally)
             if (personPhoto) await uploadPersonPhoto(pid, personPhoto);
             if (vehiclePhoto && vid) await uploadVehiclePhoto(vid, vehiclePhoto);
 
-            // Step 3: Create entry
+            // Step 4: Create entry
             const entryPayload = {
                 person_id: pid,
                 unit: finalUnit,
@@ -257,6 +281,8 @@ export default function Entry({ toast }) {
         setVehicles([]);
         setSelectedVehicle(null);
         setNewVehicleNumber('');
+        setGlobalVehicle(null);
+        setSearchingVehicle(false);
         setPersonPhoto(null);
         setVehiclePhoto(null);
         setPersonPhotoUrl(null);
@@ -434,34 +460,57 @@ export default function Entry({ toast }) {
 
                 {/* Vehicle Section */}
                 <div style={{ marginBottom: 16 }}>
-                    {personId ? (
+                    {personId || vehicles.length > 0 ? (
                         <VehicleDropdown
                             personId={personId}
                             vehicles={vehicles}
                             onSelect={setSelectedVehicle}
                             onVehiclesUpdate={() => {
-                                api.get(`/persons/${personId}/vehicles`).then(res => setVehicles(res.data || []));
+                                if (personId) {
+                                    api.get(`/persons/${personId}/vehicles`).then(res => setVehicles(res.data || []));
+                                }
                             }}
                         />
                     ) : (
                         <>
                             <label className="input-label">Vehicle Number (Optional)</label>
-                            <input
-                                type="text"
-                                className="input-field"
-                                placeholder="MH-12-AB-1234"
-                                value={newVehicleNumber}
-                                onChange={(e) => {
-                                    const val = e.target.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
-                                    let formatted = '';
-                                    for (let i = 0; i < Math.min(val.length, 10); i++) {
-                                        if (i === 2 || i === 4 || i === 6) formatted += '-';
-                                        formatted += val[i];
-                                    }
-                                    setNewVehicleNumber(formatted);
-                                }}
-                                maxLength={13}
-                            />
+                            <div style={{ position: 'relative' }}>
+                                <input
+                                    type="text"
+                                    className="input-field"
+                                    placeholder="MH-12-AB-1234"
+                                    value={newVehicleNumber}
+                                    onChange={(e) => {
+                                        const val = e.target.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+                                        let formatted = '';
+                                        for (let i = 0; i < Math.min(val.length, 10); i++) {
+                                            if (i === 2 || i === 4 || i === 6) formatted += '-';
+                                            formatted += val[i];
+                                        }
+                                        setNewVehicleNumber(formatted);
+                                        // Auto-search when full vehicle number is entered (13 chars)
+                                        if (formatted.length === 13) {
+                                            searchGlobalVehicle(formatted);
+                                        }
+                                    }}
+                                    onBlur={() => {
+                                        // Also search on blur if valid format and not already searched
+                                        const regex = /^[A-Z]{2}-[0-9]{2}-[A-Z]{2}-[0-9]{4}$/;
+                                        if (regex.test(newVehicleNumber) && !globalVehicle) {
+                                            searchGlobalVehicle(newVehicleNumber);
+                                        }
+                                    }}
+                                    maxLength={13}
+                                />
+                                {searchingVehicle && (
+                                    <span className="spinner" style={{ position: 'absolute', right: 12, top: 14, width: 18, height: 18 }} />
+                                )}
+                            </div>
+                            {globalVehicle && (
+                                <p style={{ color: 'var(--success-light)', fontSize: '0.8rem', marginTop: 4 }}>
+                                    ✅ Vehicle found globally - it will be linked to this entry
+                                </p>
+                            )}
                         </>
                     )}
                 </div>
