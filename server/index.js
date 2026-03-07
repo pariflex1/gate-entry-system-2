@@ -158,9 +158,8 @@ if (fs.existsSync(distPath)) {
     app.get(/^\/client($|\/.*)/, (req, res) => {
         res.sendFile(path.join(distPath, 'client', 'index.html'));
     });
-
-    // Fallback for root (portal selector)
-    app.get(/^\/(?!api\/).*/, (req, res) => {
+    // Fallback for root (portal selector) - ensure it DOES NOT match /api/* routes
+    app.get(/^(?!\/api).*/, (req, res) => {
         res.sendFile(path.join(distPath, 'index.html'));
     });
 }
