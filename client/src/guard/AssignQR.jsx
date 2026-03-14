@@ -11,12 +11,12 @@ export default function AssignQR({ toast }) {
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
 
-    const searchPerson = async (mob) => {
-        if (mob.length !== 10) return;
+    const searchPerson = async () => {
+        if (mobile.length !== 10) return;
         setSearching(true);
         setError('');
         try {
-            const res = await api.get(`/persons/search?mobile=${mob}`);
+            const res = await api.get(`/persons/search?mobile=${mobile}`);
             if (res.data.found) {
                 setPerson(res.data.person);
                 setPersonName(res.data.person.name);
@@ -97,21 +97,24 @@ export default function AssignQR({ toast }) {
                     {/* Mobile */}
                     <div style={{ marginBottom: 16 }}>
                         <label className="input-label">Mobile Number</label>
-                        <div style={{ display: 'flex', gap: 8, position: 'relative' }}>
+                        <div style={{ display: 'flex', gap: 8 }}>
                             <input
                                 type="tel"
                                 className="input-field"
                                 placeholder="10-digit mobile"
                                 value={mobile}
-                                onChange={(e) => {
-                                    const val = e.target.value.replace(/\D/g, '').slice(0, 10);
-                                    setMobile(val);
-                                    if (val.length === 10) searchPerson(val);
-                                }}
+                                onChange={(e) => setMobile(e.target.value.replace(/\D/g, '').slice(0, 10))}
                                 inputMode="numeric"
                                 style={{ flex: 1 }}
                             />
-                            {searching && <span className="spinner" style={{ position: 'absolute', right: 12, top: 14, width: 18, height: 18 }} />}
+                            <button
+                                type="button"
+                                className="btn btn-primary btn-sm"
+                                onClick={searchPerson}
+                                disabled={mobile.length !== 10 || searching}
+                            >
+                                {searching ? <span className="spinner" style={{ width: 14, height: 14 }} /> : 'Find'}
+                            </button>
                         </div>
                         {person && (
                             <p style={{ color: 'var(--success-light)', fontSize: '0.8rem', marginTop: 4 }}>

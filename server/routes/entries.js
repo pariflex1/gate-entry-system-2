@@ -63,9 +63,21 @@ router.post('/', async (req, res) => {
             entryData.synced_at = synced_at || new Date().toISOString();
         }
 
-        // NOTE: We used to block multiple 'IN' entries here, but it's been removed so 
-        // guards can freely update a visitor's info with a new 'IN' entry if needed.
+        // Check if person is already inside if they are attempting an 'IN' entry
+        if (entry_type === 'IN') {
+            const { data: latestEntry } = await insforge.database
+                .from('gate_entries')
+                .select('entry_type')
+                .eq('society_id', req.society_id)
+                .eq('person_id', person_id)
+                .order('entry_time', { ascending: false })
+                .limit(1)
+                .maybeSingle();
 
+            if (latestEntry && latestEntry.entry_type === 'IN') {
+                return res.status(409).json({ error: 'Person is already inside' });
+            }
+        }
 
         const { data: entry, error } = await insforge.database
             .from('gate_entries')
