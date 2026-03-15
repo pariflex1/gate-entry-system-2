@@ -22,7 +22,7 @@ api.interceptors.response.use(
         if (error.response?.status === 401 && !error.config?.url?.includes('/auth/')) {
             localStorage.removeItem('admin_token');
             localStorage.removeItem('admin_data');
-            window.location.href = '/admin/login';
+            window.location.href = import.meta.env.BASE_URL + 'login';
         }
         return Promise.reject(error);
     }

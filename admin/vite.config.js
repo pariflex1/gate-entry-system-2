@@ -4,7 +4,7 @@ import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  base: '/admin/',
+  base: process.env.VITE_DEPLOY_TARGET === 'vercel' ? '/' : '/admin/',
   server: {
     port: 5174,
     proxy: {

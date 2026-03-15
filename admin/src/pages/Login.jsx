@@ -64,7 +64,7 @@ export default function Login({ onLogin }) {
             const { error: authError } = await insforge.auth.signInWithOAuth({
                 provider,
                 options: {
-                    redirectTo: window.location.origin + '/admin/'
+                    redirectTo: window.location.origin + import.meta.env.BASE_URL
                 }
             });
             if (authError) throw authError;
