@@ -98,19 +98,12 @@ router.post('/guard-login', async (req, res) => {
             return res.status(403).json({ error: 'This society has been suspended' });
         }
 
+        // Issue JWT
         const token = jwt.sign(
             { role: 'guard', guard_id: matchedGuard.id, society_id },
             process.env.JWT_SECRET,
             { expiresIn: '12h' }
         );
-
-        // Check if guard has any passkeys
-        const { data: passkeys } = await insforge.database
-            .from('passkeys')
-            .select('id')
-            .or(`guard_id.eq.${matchedGuard.id},user_id.eq.${matchedGuard.id}`)
-            .eq('user_type', 'guard')
-            .limit(1);
 
         // Log guard activity
         await insforge.database.from('guard_activity').insert({
@@ -124,7 +117,6 @@ router.post('/guard-login', async (req, res) => {
             token,
             guard: { id: matchedGuard.id, name: matchedGuard.name, mobile: matchedGuard.mobile, society_slug: society.slug },
             society_id,
-            has_passkey: (passkeys && passkeys.length > 0),
         });
     } catch (error) {
         console.error('Guard login error:', error);
@@ -248,14 +240,6 @@ router.post('/admin-login', async (req, res) => {
             .eq('auth_user_id', authUserId)
             .order('created_at', { ascending: false });
 
-        // Check if user has any passkeys
-        const { data: passkeys } = await insforge.database
-            .from('passkeys')
-            .select('id')
-            .or(`admin_id.eq.${authUserId},user_id.eq.${authUserId}`)
-            .eq('user_type', 'admin')
-            .limit(1);
-
         // Issue JWT (admin_id = auth.users.id)
         const token = jwt.sign(
             { role: 'admin', admin_id: authUserId },
@@ -267,7 +251,6 @@ router.post('/admin-login', async (req, res) => {
             token,
             admin: { id: authUserId, email: userEmail },
             societies: societies || [],
-            has_passkey: (passkeys && passkeys.length > 0),
         });
     } catch (error) {
         console.error('Admin login error:', error);
@@ -285,7 +268,7 @@ router.post('/social-login', async (req, res) => {
         if (!access_token) return res.status(400).json({ error: 'Token missing' });
 
         // Get user from access token
-        const { data: userData, error: userError } = await insforge.auth.getCurrentUser(access_token);
+        const { data: userData, error: userError } = await insforge.auth.getUser(access_token);
         if (userError || !userData || !userData.user) {
             return res.status(401).json({ error: 'Invalid social token' });
         }
@@ -300,14 +283,6 @@ router.post('/social-login', async (req, res) => {
             .eq('auth_user_id', authUserId)
             .order('created_at', { ascending: false });
 
-        // Check if user has any passkeys
-        const { data: passkeys } = await insforge.database
-            .from('passkeys')
-            .select('id')
-            .or(`admin_id.eq.${authUserId},user_id.eq.${authUserId}`)
-            .eq('user_type', 'admin')
-            .limit(1);
-
         // Issue our app JWT
         const token = jwt.sign(
             { role: 'admin', admin_id: authUserId },
@@ -319,7 +294,6 @@ router.post('/social-login', async (req, res) => {
             token,
             admin: { id: authUserId, email: userEmail },
             societies: societies || [],
-            has_passkey: (passkeys && passkeys.length > 0),
         });
     } catch (error) {
         console.error('Social login error:', error);

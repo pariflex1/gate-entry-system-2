@@ -98,7 +98,7 @@ router.post('/assign', async (req, res) => {
         // Update person → qr_code + qr_status (Globally)
         await insforge.database
             .from('known_persons')
-            .update({ qr_code, qr_status: true })
+            .update({ qr_code, qr_status: 'active' })
             .eq('id', person.id);
 
         // Log guard activity
@@ -150,7 +150,7 @@ router.post('/deactivate', async (req, res) => {
         if (qr.assigned_person_id) {
             await insforge.database
                 .from('known_persons')
-                .update({ qr_code: null, qr_status: false })
+                .update({ qr_code: null, qr_status: 'inactive' })
                 .eq('id', qr.assigned_person_id);
         }
 

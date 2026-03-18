@@ -74,11 +74,7 @@ async function checkSocietyActive(req, res, next) {
             .single();
 
         if (error || !society) {
-            // If the society ID in header/JWT is stale/invalid:
-            // - Clear it so downstream doesn't use it
-            // - Don't error out here unless THIS route strictly requires it (societyRequired does that)
-            req.society_id = null;
-            return next();
+            return res.status(403).json({ error: 'Society not found' });
         }
 
         // Security Check: If admin, verify ownership
@@ -86,7 +82,7 @@ async function checkSocietyActive(req, res, next) {
             return res.status(403).json({ error: 'Permission denied: You do not own this society' });
         }
 
-        if (society.status !== true) {
+        if (society.status !== 'active') {
             return res.status(403).json({ error: 'Society is not active' });
         }
 

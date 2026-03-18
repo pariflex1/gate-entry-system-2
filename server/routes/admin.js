@@ -67,14 +67,14 @@ router.post('/societies', async (req, res) => {
                 name,
                 slug,
                 address: address || null,
-                status: true,
+                status: 'active',
             })
             .select()
             .single();
 
         if (error) {
-            console.error('Society insert error:', JSON.stringify(error, null, 2));
-            return res.status(500).json({ error: `Failed to create society: ${error.message || 'Unknown error'}` });
+            console.error('Society insert error:', error);
+            return res.status(500).json({ error: 'Failed to create society' });
         }
 
         return res.status(201).json(society);
@@ -226,7 +226,7 @@ router.get('/persons', async (req, res) => {
         const { data: societyLinks, error: linkError } = await insforge.database
             .from('person_society_data')
             .select('person_id, unit')
-            .eq('society_id', req.society_id);
+            ;
 
         if (linkError) {
             return res.status(500).json({ error: 'Failed to fetch persons' });
@@ -762,92 +762,6 @@ router.delete('/qr/:code', async (req, res) => {
     }
 });
 
-// ============ CURRENTLY INSIDE ============
-
-/**
- * GET /api/admin/currently-inside
- * Returns all persons whose latest entry is IN (no matching OUT)
- */
-router.get('/currently-inside', async (req, res) => {
-    try {
-        const sid = req.society_id;
-
-        const { data: allEntries, error } = await insforge.database
-            .from('gate_entries')
-            .select('id, person_id, unit, purpose, vehicle_id, entry_type, entry_method, entry_time, guard_id')
-            .eq('society_id', sid)
-            .order('entry_time', { ascending: false });
-
-        if (error) {
-            return res.status(500).json({ error: 'Failed to fetch entries' });
-        }
-
-        // Compute currently inside: person is "inside" if their latest entry is IN
-        const latestByPerson = {};
-        for (const entry of (allEntries || [])) {
-            if (!latestByPerson[entry.person_id]) {
-                latestByPerson[entry.person_id] = entry;
-            }
-        }
-
-        const insideEntries = Object.values(latestByPerson).filter(e => e.entry_type === 'IN');
-
-        // Fetch person details
-        const personIds = insideEntries.map(e => e.person_id);
-        let persons = [];
-        if (personIds.length > 0) {
-            const { data } = await insforge.database
-                .from('known_persons')
-                .select('id, name, mobile, person_photo_url')
-                .in('id', personIds);
-            persons = data || [];
-        }
-
-        // Fetch vehicle details
-        const vehicleIds = insideEntries.map(e => e.vehicle_id).filter(Boolean);
-        let vehicles = [];
-        if (vehicleIds.length > 0) {
-            const { data } = await insforge.database
-                .from('person_vehicles')
-                .select('id, vehicle_number')
-                .in('id', vehicleIds);
-            vehicles = data || [];
-        }
-
-        // Fetch guard names
-        const guardIds = [...new Set(insideEntries.map(e => e.guard_id))];
-        let guards = [];
-        if (guardIds.length > 0) {
-            const { data } = await insforge.database
-                .from('guards')
-                .select('id, name')
-                .in('id', guardIds);
-            guards = data || [];
-        }
-
-        const personMap = {};
-        for (const p of persons) personMap[p.id] = p;
-        const vehicleMap = {};
-        for (const v of vehicles) vehicleMap[v.id] = v;
-        const guardMap = {};
-        for (const g of guards) guardMap[g.id] = g;
-
-        const result = insideEntries.map(e => ({
-            ...e,
-            person_name: personMap[e.person_id]?.name || 'Unknown',
-            person_mobile: personMap[e.person_id]?.mobile || '',
-            person_photo_url: personMap[e.person_id]?.person_photo_url || null,
-            vehicle_number: e.vehicle_id ? vehicleMap[e.vehicle_id]?.vehicle_number || null : null,
-            guard_name: guardMap[e.guard_id]?.name || 'Unknown',
-        }));
-
-        return res.json(result);
-    } catch (error) {
-        console.error('Admin currently inside error:', error);
-        return res.status(500).json({ error: 'Internal server error' });
-    }
-});
-
 // ============ LOGS ============
 
 /**
@@ -855,7 +769,7 @@ router.get('/currently-inside', async (req, res) => {
  */
 router.get('/logs/entries', async (req, res) => {
     try {
-        const { person, unit, guard, type, from, to, search, page = 1, limit = 50 } = req.query;
+        const { person, unit, guard, type, from, to, page = 1, limit = 50 } = req.query;
         const offset = (parseInt(page) - 1) * parseInt(limit);
 
         let query = insforge.database
@@ -870,23 +784,6 @@ router.get('/logs/entries', async (req, res) => {
         if (type) query = query.eq('entry_type', type);
         if (from) query = query.gte('entry_time', from);
         if (to) query = query.lte('entry_time', to);
-        // Handle complex search: unit, purpose, person_name, person_mobile
-        if (search) {
-            // First find person_ids that match name or mobile
-            const { data: matchedPersons } = await insforge.database
-                .from('known_persons')
-                .select('id')
-                .or(`name.ilike.%${search}%,mobile.ilike.%${search}%`);
-
-            const matchedIds = (matchedPersons || []).map(p => p.id);
-            if (matchedIds.length > 0) {
-                // Combine with unit/purpose
-                query = query.or(`unit.ilike.%${search}%,purpose.ilike.%${search}%,person_id.in.("${matchedIds.join('","')}")`);
-            } else {
-                // Just unit/purpose
-                query = query.or(`unit.ilike.%${search}%,purpose.ilike.%${search}%`);
-            }
-        }
 
         const { data, error, count } = await query;
 
@@ -939,7 +836,7 @@ router.get('/logs/entries', async (req, res) => {
  */
 router.get('/logs/activity', async (req, res) => {
     try {
-        const { guard, action, from, to, search, page = 1, limit = 50 } = req.query;
+        const { guard, action, from, to, page = 1, limit = 50 } = req.query;
         const offset = (parseInt(page) - 1) * parseInt(limit);
 
         let query = insforge.database
@@ -953,22 +850,6 @@ router.get('/logs/activity', async (req, res) => {
         if (action) query = query.eq('action', action);
         if (from) query = query.gte('created_at', from);
         if (to) query = query.lte('created_at', to);
-        // Handle search: detail or guard name
-        if (search) {
-            // Find guards matching name
-            const { data: matchedGuards } = await insforge.database
-                .from('guards')
-                .select('id')
-                .eq('society_id', req.society_id)
-                .ilike('name', `%${search}%`);
-
-            const gIds = (matchedGuards || []).map(g => g.id);
-            if (gIds.length > 0) {
-                query = query.or(`detail.ilike.%${search}%,guard_id.in.("${gIds.join('","')}")`);
-            } else {
-                query = query.ilike('detail', `%${search}%`);
-            }
-        }
 
         const { data, error, count } = await query;
 
