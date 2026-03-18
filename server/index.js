@@ -116,31 +116,6 @@ app.get('/api/settings', async (req, res) => {
     }
 });
 
-// Search for societies by name or slug (public — for the portal selector)
-app.get('/api/societies/search', async (req, res) => {
-    try {
-        const { q } = req.query;
-        if (!q || q.length < 2) return res.json([]);
-
-        const { data: societies, error } = await insforge.database
-            .from('societies')
-            .select('name, slug, address')
-            .or(`name.ilike.%${q}%,slug.ilike.%${q}%`)
-            .eq('status', true)
-            .limit(10);
-
-        if (error) {
-            console.error('Society search error:', error);
-            return res.status(500).json({ error: 'Search failed' });
-        }
-
-        return res.json(societies || []);
-    } catch (error) {
-        console.error('Society search error:', error);
-        return res.status(500).json({ error: 'Internal server error' });
-    }
-});
-
 // Lookup society by slug (for the guard app to identify the society)
 app.get('/api/society/:slug', async (req, res) => {
     try {

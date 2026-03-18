@@ -51,4 +51,14 @@ const redirectsContent = `
 `.trim();
 fs.writeFileSync(path.join(distPath, '_redirects'), redirectsContent);
 
+console.log('Generating vercel.json for Vercel/InsForge routing...');
+const vercelConfig = {
+    rewrites: [
+        { source: "/api/(.*)", destination: "/api/$1" },
+        { source: "/admin/(.*)", destination: "/admin/index.html" },
+        { source: "/client/(.*)", destination: "/client/index.html" }
+    ]
+};
+fs.writeFileSync(path.join(distPath, 'vercel.json'), JSON.stringify(vercelConfig, null, 4));
+
 console.log('Build preparation complete! ✅');
