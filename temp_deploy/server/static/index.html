@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gate Entry System</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background: linear-gradient(135deg, #0B1120, #1E293B);
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            text-align: center;
+            background: rgba(30, 41, 59, 0.5);
+            padding: 40px;
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            margin-bottom: 20px;
+            font-weight: 800;
+        }
+
+        .links {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            margin-top: 30px;
+        }
+
+        a {
+            display: inline-block;
+            padding: 12px 24px;
+            background: #3B82F6;
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        a:hover {
+            background: #2563EB;
+            transform: translateY(-2px);
+        }
+
+        .admin-link {
+            background: #8B5CF6;
+        }
+
+        .admin-link:hover {
+            background: #7C3AED;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Gate Entry System</h1>
+        <p>Select your portal to continue</p>
+        <div class="links">
+            <a href="/client/">Guard Portal</a>
+            <a href="/admin/" class="admin-link">Admin Portal</a>
+        </div>
+    </div>
+</body>
+
+</html>
