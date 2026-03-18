@@ -32,10 +32,9 @@ export default function SocietySelector({ onSelect }) {
         setLoading(true);
         try {
             const res = await api.post('/admin/societies', newSociety);
-
-            // ALWAYS auto-select the newly created society
-            onSelect(res.data);
-
+            setSocieties([res.data, ...societies]);
+            setIsCreating(false);
+            setNewSociety({ name: '', address: '' });
         } catch (err) {
             setError(err.response?.data?.error || 'Failed to create society');
         } finally {
@@ -107,9 +106,9 @@ export default function SocietySelector({ onSelect }) {
                                     </div>
                                     <span style={{
                                         padding: '4px 8px', borderRadius: 6, fontSize: '0.7rem', fontWeight: 600,
-                                        background: s.status ? 'rgba(16,185,129,0.1)' : 'rgba(248,113,113,0.1)',
-                                        color: s.status ? '#10B981' : '#F87171'
-                                    }}>{s.status ? 'ACTIVE' : 'INACTIVE'}</span>
+                                        background: s.status === 'active' ? 'rgba(16,185,129,0.1)' : 'rgba(248,113,113,0.1)',
+                                        color: s.status === 'active' ? '#10B981' : '#F87171'
+                                    }}>{s.status.toUpperCase()}</span>
                                 </button>
                             ))}
                         </div>

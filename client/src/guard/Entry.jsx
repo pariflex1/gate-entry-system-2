@@ -140,19 +140,6 @@ export default function Entry({ toast }) {
         }
     }, [toast]);
 
-    const handleVoiceVehicleNumber = (transcript) => {
-        const val = transcript.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
-        let formatted = '';
-        for (let i = 0; i < Math.min(val.length, 10); i++) {
-            if (i === 2 || i === 4 || i === 6) formatted += '-';
-            formatted += val[i];
-        }
-        setNewVehicleNumber(formatted);
-        if (formatted.length === 13) {
-            searchGlobalVehicle(formatted);
-        }
-    };
-
     // Search vehicle globally when full number is entered
     const searchGlobalVehicle = useCallback(async (vehicleNumber) => {
         const regex = /^[A-Z]{2}-[0-9]{2}-[A-Z]{2}-[0-9]{4}$/;
@@ -515,10 +502,8 @@ export default function Entry({ toast }) {
                                     }}
                                     maxLength={13}
                                 />
-                                {searchingVehicle ? (
+                                {searchingVehicle && (
                                     <span className="spinner" style={{ position: 'absolute', right: 12, top: 14, width: 18, height: 18 }} />
-                                ) : (
-                                    <button type="button" onClick={() => startVoice(handleVoiceVehicleNumber)} style={{ position: 'absolute', right: 8, top: 12, background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem' }}>🎤</button>
                                 )}
                             </div>
                             {globalVehicle && (

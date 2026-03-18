@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { startRegistration } from '@simplewebauthn/browser';
 import api from '../services/api';
 import { useSociety } from '../hooks/useSociety';
 
@@ -10,65 +9,6 @@ export default function Login({ onLogin }) {
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const [lockoutMsg, setLockoutMsg] = useState('');
-
-    // Passkey enforcement state
-    const [showPasskeySetup, setShowPasskeySetup] = useState(false);
-    const [pendingLoginData, setPendingLoginData] = useState(null);
-    const [passkeySetupLoading, setPasskeySetupLoading] = useState(false);
-    const [passkeyDeviceName, setPasskeyDeviceName] = useState('');
-    const [passkeySetupMsg, setPasskeySetupMsg] = useState('');
-
-    const finalizeLogin = (loginData) => {
-        // Store credentials first so API calls work
-        localStorage.setItem('guard_token', loginData.token);
-        localStorage.setItem('guard_data', JSON.stringify(loginData.guard));
-        localStorage.setItem('society_id', loginData.society_id);
-
-        if (loginData.has_passkey === false) {
-            setPendingLoginData(loginData);
-            setShowPasskeySetup(true);
-            return;
-        }
-
-        onLogin(loginData);
-    };
-
-    const handlePasskeySetup = async () => {
-        setPasskeySetupLoading(true);
-        setPasskeySetupMsg('');
-        setError('');
-        try {
-            const token = localStorage.getItem('guard_token');
-            const optionsRes = await api.post('/auth/biometric/register-options', {
-                deviceName: passkeyDeviceName || 'Guard Device',
-            }, { headers: { Authorization: `Bearer ${token}` } });
-
-            const regResult = await startRegistration({ optionsJSON: optionsRes.data });
-            await api.post('/auth/biometric/register-verify', regResult, {
-                headers: { Authorization: `Bearer ${token}` },
-            });
-
-            setPasskeySetupMsg('✅ Biometric registered! Redirecting...');
-            setTimeout(() => {
-                onLogin(pendingLoginData);
-            }, 1000);
-        } catch (err) {
-            if (err.name === 'NotAllowedError') {
-                setError('Biometric registration was cancelled. Please try again — it is required.');
-            } else {
-                setError(err.response?.data?.error || err.message || 'Registration failed. Please try again.');
-            }
-        } finally {
-            setPasskeySetupLoading(false);
-        }
-    };
-
-    const handleSkipPasskey = () => {
-        // Mandatory enforcement — logout if they try to skip
-        localStorage.clear();
-        setShowPasskeySetup(false);
-        setError('Passkey registration is required to continue.');
-    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -92,7 +32,10 @@ export default function Login({ onLogin }) {
                 society_slug: slug,
             });
 
-            finalizeLogin(res.data);
+            localStorage.setItem('guard_token', res.data.token);
+            localStorage.setItem('guard_data', JSON.stringify(res.data.guard));
+            localStorage.setItem('society_id', res.data.society_id);
+            onLogin(res.data);
         } catch (err) {
             const data = err.response?.data;
             if (err.response?.status === 429) {
@@ -105,63 +48,6 @@ export default function Login({ onLogin }) {
         }
     };
 
-    /* ──────── PASSKEY SETUP VIEW ──────── */
-    if (showPasskeySetup) {
-        return (
-            <div style={{
-                minHeight: '100dvh',
-                display: 'flex', flexDirection: 'column',
-                alignItems: 'center', justifyContent: 'center',
-                padding: 24,
-                background: 'linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 50%, var(--bg-primary) 100%)',
-            }}>
-                <div className="glass-card" style={{
-                    width: '100%', maxWidth: 380, padding: 28, textAlign: 'center',
-                }}>
-                    <div style={{
-                        width: 64, height: 64, borderRadius: 16,
-                        background: 'linear-gradient(135deg, var(--primary), var(--accent))',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        margin: '0 auto 16px', fontSize: 28,
-                    }}>🔒</div>
-                    <h2 style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: 8 }}>Secure Your Account</h2>
-                    <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: 24, lineHeight: 1.5 }}>
-                        Register Face ID, Fingerprint, or Device PIN for quick & secure future logins.
-                    </p>
-
-                    <input
-                        className="input-field"
-                        value={passkeyDeviceName}
-                        onChange={e => setPasskeyDeviceName(e.target.value)}
-                        placeholder="Device name (e.g. My Phone)"
-                        style={{ marginBottom: 16, textAlign: 'center' }}
-                    />
-
-                    {error && <p className="error-text" style={{ marginBottom: 12, textAlign: 'center' }}>{error}</p>}
-                    {passkeySetupMsg && <p style={{ color: '#34D399', fontSize: '0.85rem', marginBottom: 12 }}>{passkeySetupMsg}</p>}
-
-                    <button
-                        onClick={handlePasskeySetup}
-                        className="btn btn-primary btn-full"
-                        disabled={passkeySetupLoading}
-                        style={{ marginBottom: 12 }}
-                    >
-                        {passkeySetupLoading ? <><span className="spinner" /> Registering...</> : '🔐 Register Biometric Now'}
-                    </button>
-
-                    <button
-                        onClick={handleSkipPasskey}
-                        className="btn btn-full"
-                        style={{ background: 'none', color: 'var(--text-muted)', border: '1px solid var(--border-color)', fontSize: '0.85rem' }}
-                    >
-                        Cancel & Logout
-                    </button>
-                </div>
-            </div>
-        );
-    }
-
-    /* ──────── LOGIN VIEW ──────── */
     return (
         <div style={{
             minHeight: '100dvh',

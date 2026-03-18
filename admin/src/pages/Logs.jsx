@@ -1,33 +1,20 @@
 import { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
 import api from '../services/api';
 import { format } from 'date-fns';
 
 export default function Logs() {
-    const location = useLocation();
-    const queryParams = new URLSearchParams(location.search);
-    const filterType = queryParams.get('type') || '';
-    const filterFrom = queryParams.get('from') || '';
-    const filterTo = queryParams.get('to') || '';
-
     const [tab, setTab] = useState('entries');
     const [entries, setEntries] = useState([]);
     const [activities, setActivities] = useState([]);
     const [loading, setLoading] = useState(true);
     const [page, setPage] = useState(1);
     const [total, setTotal] = useState(0);
-    const [searchQuery, setSearchQuery] = useState('');
     const limit = 30;
 
     const fetchEntries = async (p = 1) => {
         setLoading(true);
         try {
-            let url = `/admin/logs/entries?page=${p}&limit=${limit}`;
-            if (filterType) url += `&type=${filterType}`;
-            if (filterFrom) url += `&from=${filterFrom}`;
-            if (filterTo) url += `&to=${filterTo}`;
-            if (searchQuery) url += `&search=${encodeURIComponent(searchQuery)}`;
-            const res = await api.get(url);
+            const res = await api.get(`/admin/logs/entries?page=${p}&limit=${limit}`);
             setEntries(res.data.entries || []);
             setTotal(res.data.total || 0);
             setPage(p);
@@ -37,24 +24,17 @@ export default function Logs() {
     const fetchActivity = async (p = 1) => {
         setLoading(true);
         try {
-            let url = `/admin/logs/activity?page=${p}&limit=${limit}`;
-            if (searchQuery) url += `&search=${encodeURIComponent(searchQuery)}`;
-            const res = await api.get(url);
+            const res = await api.get(`/admin/logs/activity?page=${p}&limit=${limit}`);
             setActivities(res.data.activities || []);
             setTotal(res.data.total || 0);
             setPage(p);
         } catch { } finally { setLoading(false); }
     };
 
-    // Search & Tab Handling
     useEffect(() => {
-        const timer = setTimeout(() => {
-            setPage(1);
-            if (tab === 'entries') fetchEntries(1);
-            else fetchActivity(1);
-        }, searchQuery ? 400 : 0);
-        return () => clearTimeout(timer);
-    }, [tab, searchQuery]);
+        if (tab === 'entries') fetchEntries(1);
+        else fetchActivity(1);
+    }, [tab]);
 
     const totalPages = Math.ceil(total / limit);
 
@@ -120,22 +100,12 @@ export default function Logs() {
                 </button>
             </div>
 
+            {/* Tab switch */}
             <div style={{ display: 'flex', gap: 4, marginBottom: 20, background: 'var(--bg-card)', borderRadius: 8, padding: 4, width: 'fit-content' }}>
                 <button className={`btn btn-sm ${tab === 'entries' ? 'btn-primary' : 'btn-outline'}`} style={{ border: 'none' }}
-                    onClick={() => { setTab('entries'); setPage(1); }}>Gate Entries</button>
+                    onClick={() => setTab('entries')}>Gate Entries</button>
                 <button className={`btn btn-sm ${tab === 'activity' ? 'btn-primary' : 'btn-outline'}`} style={{ border: 'none' }}
-                    onClick={() => { setTab('activity'); setPage(1); }}>Guard Activity</button>
-            </div>
-
-            <div style={{ marginBottom: 20 }}>
-                <input
-                    type="text"
-                    className="input"
-                    placeholder="Search by name, mobile, unit, purpose..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    style={{ width: '100%', maxWidth: 500 }}
-                />
+                    onClick={() => setTab('activity')}>Guard Activity</button>
             </div>
 
             {loading ? (

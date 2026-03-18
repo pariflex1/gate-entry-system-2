@@ -9,7 +9,6 @@ import Persons from './pages/Persons';
 import QRCodes from './pages/QRCodes';
 import Logs from './pages/Logs';
 import Account from './pages/Account';
-import CurrentlyInside from './pages/CurrentlyInside';
 import './index.css';
 import SocietySelector from './components/SocietySelector';
 
@@ -60,7 +59,7 @@ function Sidebar({ isOpen, onClose, selectedSociety, onSwitchSociety }) {
               localStorage.removeItem('admin_societies');
               localStorage.removeItem('selected_society_id');
               localStorage.removeItem('selected_society_data');
-              window.location.href = import.meta.env.BASE_URL + 'login';
+              window.location.href = '/admin/login';
             }
           }}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -96,7 +95,6 @@ function AdminApp({ selectedSociety, onSwitchSociety }) {
           <Route path="/units" element={<Units />} />
           <Route path="/qr-codes" element={<QRCodes />} />
           <Route path="/logs" element={<Logs />} />
-          <Route path="/currently-inside" element={<CurrentlyInside />} />
           <Route path="/account" element={<Account />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
@@ -142,7 +140,7 @@ export default function App() {
   };
 
   return (
-    <BrowserRouter basename={import.meta.env.BASE_URL}>
+    <BrowserRouter basename="/admin">
       {isLoggedIn ? (
         selectedSociety ? (
           <AdminApp selectedSociety={selectedSociety} onSwitchSociety={handleSwitchSociety} />

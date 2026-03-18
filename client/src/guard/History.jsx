@@ -51,7 +51,6 @@ export default function History({ toast }) {
                                     </span>
                                 </div>
                                 <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-                                    {e.person_mobile && <span style={{ marginRight: 6 }}>📞 {e.person_mobile} • </span>}
                                     {e.unit || 'No unit'} • {e.purpose || '—'} {e.vehicle_number ? ` • 🚗 ${e.vehicle_number}` : ''} • {e.entry_method}
                                 </div>
                             </div>

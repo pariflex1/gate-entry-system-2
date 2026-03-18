@@ -17,12 +17,6 @@ export default function Persons() {
     const [vehicleError, setVehicleError] = useState('');
     const [vehicleSaving, setVehicleSaving] = useState(false);
 
-    // Edit person
-    const [editingPerson, setEditingPerson] = useState(null); // person id
-    const [editForm, setEditForm] = useState({ name: '', unit: '' });
-    const [editSaving, setEditSaving] = useState(false);
-    const [editError, setEditError] = useState('');
-
     const limit = 20;
 
     const fetchPersons = async () => {
@@ -105,40 +99,6 @@ export default function Persons() {
         }
     };
 
-    const startEdit = (p) => {
-        setEditingPerson(p.id);
-        setEditForm({ name: p.name, unit: p.unit || '' });
-        setEditError('');
-    };
-
-    const cancelEdit = () => {
-        setEditingPerson(null);
-        setEditForm({ name: '', unit: '' });
-        setEditError('');
-    };
-
-    const handleSaveEdit = async (personId) => {
-        if (!editForm.name.trim()) {
-            setEditError('Name is required');
-            return;
-        }
-        setEditSaving(true);
-        setEditError('');
-        try {
-            const res = await api.put(`/admin/persons/${personId}`, {
-                name: editForm.name.trim(),
-                unit: editForm.unit.trim() || null,
-            });
-            // Update the local list
-            setPersons(prev => prev.map(p => p.id === personId ? { ...p, name: res.data.name, unit: res.data.unit } : p));
-            setEditingPerson(null);
-        } catch (err) {
-            setEditError(err.response?.data?.error || 'Failed to update person');
-        } finally {
-            setEditSaving(false);
-        }
-    };
-
     const totalPages = Math.ceil(total / limit);
 
     return (
@@ -209,7 +169,7 @@ export default function Persons() {
                                 </div>
 
                                 {/* QR Badge */}
-                                {p.qr_status === true && (
+                                {p.qr_status === 'active' && (
                                     <span className="badge badge-success" style={{ fontSize: '0.7rem' }}>QR Active</span>
                                 )}
 
@@ -229,47 +189,6 @@ export default function Persons() {
                                     padding: '16px 20px',
                                     background: 'var(--bg-secondary)',
                                 }}>
-                                    {/* Edit Person Section */}
-                                    {editingPerson === p.id ? (
-                                        <div style={{ marginBottom: 16, padding: 14, background: 'var(--bg-primary)', borderRadius: 10, border: '1px solid var(--border-color)' }}>
-                                            <h3 style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: 12 }}>✏️ Edit Person</h3>
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                                                <div>
-                                                    <label className="label">Name *</label>
-                                                    <input type="text" className="form-input" value={editForm.name}
-                                                        onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                                                        style={{ width: '100%' }} />
-                                                </div>
-                                                <div>
-                                                    <label className="label">Unit / Flat</label>
-                                                    <input type="text" className="form-input" value={editForm.unit}
-                                                        onChange={(e) => setEditForm({ ...editForm, unit: e.target.value })}
-                                                        placeholder="e.g. A-101" style={{ width: '100%' }} />
-                                                </div>
-                                                {editError && <p style={{ color: 'var(--danger)', fontSize: '0.8rem' }}>{editError}</p>}
-                                                <div style={{ display: 'flex', gap: 8 }}>
-                                                    <button className="btn btn-primary btn-sm" onClick={() => handleSaveEdit(p.id)} disabled={editSaving}>
-                                                        {editSaving ? 'Saving...' : 'Save Changes'}
-                                                    </button>
-                                                    <button className="btn btn-sm" onClick={cancelEdit} style={{ border: '1px solid var(--border-color)' }}>Cancel</button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        <div style={{ marginBottom: 16 }}>
-                                            <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: 4 }}>
-                                                <strong>Registered On:</strong> {new Date(p.created_at).toLocaleString('en-IN')}
-                                            </div>
-                                            <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: 8 }}>
-                                                <strong>QR Code:</strong> {p.qr_code ? p.qr_code : 'None assigned'}
-                                                {p.qr_status ? ' (Active)' : p.qr_code ? ' (Inactive)' : ''}
-                                            </div>
-                                            <button className="btn btn-outline btn-sm" onClick={(e) => { e.stopPropagation(); startEdit(p); }}>
-                                                ✏️ Edit Person
-                                            </button>
-                                        </div>
-                                    )}
-
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                                         <h3 style={{ fontSize: '0.9rem', fontWeight: 600, margin: 0 }}>🚗 Vehicles</h3>
                                         <button
