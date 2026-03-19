@@ -82,7 +82,7 @@ async function checkSocietyActive(req, res, next) {
             return res.status(403).json({ error: 'Permission denied: You do not own this society' });
         }
 
-        if (society.status !== 'active') {
+        if (society.status !== true) {
             return res.status(403).json({ error: 'Society is not active' });
         }
 

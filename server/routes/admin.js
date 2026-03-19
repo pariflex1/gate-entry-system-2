@@ -67,7 +67,7 @@ router.post('/societies', async (req, res) => {
                 name,
                 slug,
                 address: address || null,
-                status: 'active',
+                status: true,
             })
             .select()
             .single();

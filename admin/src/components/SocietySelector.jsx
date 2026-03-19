@@ -106,9 +106,9 @@ export default function SocietySelector({ onSelect }) {
                                     </div>
                                     <span style={{
                                         padding: '4px 8px', borderRadius: 6, fontSize: '0.7rem', fontWeight: 600,
-                                        background: s.status === 'active' ? 'rgba(16,185,129,0.1)' : 'rgba(248,113,113,0.1)',
-                                        color: s.status === 'active' ? '#10B981' : '#F87171'
-                                    }}>{s.status.toUpperCase()}</span>
+                                        background: s.status ? 'rgba(16,185,129,0.1)' : 'rgba(248,113,113,0.1)',
+                                        color: s.status ? '#10B981' : '#F87171'
+                                    }}>{s.status ? 'ACTIVE' : 'INACTIVE'}</span>
                                 </button>
                             ))}
                         </div>
