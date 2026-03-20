@@ -88,11 +88,12 @@ export default function Persons() {
         try {
             const res = await api.put(`/admin/persons/${editingPerson}`, {
                 name: editForm.name.trim(),
+                mobile: editForm.mobile.trim() || undefined,
                 unit: editForm.unit.trim() || null,
             });
             // Update local state
             setPersons(prev => prev.map(p =>
-                p.id === editingPerson ? { ...p, name: res.data.name, unit: res.data.unit } : p
+                p.id === editingPerson ? { ...p, name: res.data.name, mobile: res.data.mobile, unit: res.data.unit } : p
             ));
             setEditingPerson(null);
         } catch (err) {
@@ -249,13 +250,13 @@ export default function Persons() {
                                                     />
                                                 </div>
                                                 <div>
-                                                    <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Mobile (read-only)</label>
+                                                    <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Mobile</label>
                                                     <input
                                                         type="text"
                                                         className="form-input"
                                                         value={editForm.mobile}
-                                                        disabled
-                                                        style={{ width: '100%', opacity: 0.5 }}
+                                                        onChange={(e) => setEditForm(f => ({ ...f, mobile: e.target.value.replace(/[^0-9+]/g, '') }))}
+                                                        style={{ width: '100%' }}
                                                     />
                                                 </div>
                                                 <div>

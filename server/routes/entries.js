@@ -249,20 +249,29 @@ router.get('/inside', async (req, res) => {
 });
 
 /**
- * GET /api/entries/history?hours=8
- * Returns entries within the last N hours
+ * GET /api/entries/history?hours=8&from=...&to=...
+ * Returns entries within the last N hours, or custom date range
  */
 router.get('/history', async (req, res) => {
     try {
-        const hours = parseInt(req.query.hours) || 8;
-        const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+        const { hours, from, to } = req.query;
 
-        const { data: entries, error } = await insforge.database
+        let query = insforge.database
             .from('gate_entries')
             .select('id, person_id, unit, purpose, vehicle_id, entry_type, entry_method, entry_time, guard_id, synced_at')
             .eq('society_id', req.society_id)
-            .gte('entry_time', since)
             .order('entry_time', { ascending: false });
+
+        if (from || to) {
+            if (from) query = query.gte('entry_time', from);
+            if (to) query = query.lte('entry_time', to);
+        } else {
+            const h = parseInt(hours) || 8;
+            const since = new Date(Date.now() - h * 60 * 60 * 1000).toISOString();
+            query = query.gte('entry_time', since);
+        }
+
+        const { data: entries, error } = await query;
 
         if (error) {
             return res.status(500).json({ error: 'Failed to fetch history' });

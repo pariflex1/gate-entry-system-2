@@ -1,6 +1,9 @@
 {
   "name": "gate-entry-system-2",
   "version": "1.0.0",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "workspaces": [
     "admin",
     "client"
@@ -10,8 +13,8 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
-    "build:admin": "npm run build -w admin",
-    "build:client": "npm run build -w client",
+    "build:admin": "npm run build --prefix admin",
+    "build:client": "npm run build --prefix client",
     "build": "npm run build:admin && npm run build:client && node scripts/postbuild.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import api from '../services/api';
 import { format } from 'date-fns';
+import DateFilterPopup from '../shared/DateFilterPopup';
 
 export default function History({ toast }) {
     const [entries, setEntries] = useState([]);
@@ -9,21 +10,30 @@ export default function History({ toast }) {
     const [typeFilter, setTypeFilter] = useState('ALL'); // ALL, IN, OUT
     const [selectedEntry, setSelectedEntry] = useState(null);
     const [fullImageUrl, setFullImageUrl] = useState(null);
+    const [showDateFilter, setShowDateFilter] = useState(false);
+    const [dateRange, setDateRange] = useState({ from: '', to: '' });
+
+    const fetchHistory = async () => {
+        setLoading(true);
+        try {
+            let url = '/entries/history?hours=8';
+            if (dateRange.from || dateRange.to) {
+                url = '/entries/history?';
+                if (dateRange.from) url += `from=${dateRange.from}T00:00:00.000Z&`;
+                if (dateRange.to) url += `to=${dateRange.to}T23:59:59.999Z&`;
+            }
+            const res = await api.get(url);
+            setEntries(res.data || []);
+        } catch {
+            toast?.error('Failed to load history');
+        } finally {
+            setLoading(false);
+        }
+    };
 
     useEffect(() => {
-        const fetchHistory = async () => {
-            setLoading(true);
-            try {
-                const res = await api.get('/entries/history?hours=8');
-                setEntries(res.data || []);
-            } catch {
-                toast?.error('Failed to load history');
-            } finally {
-                setLoading(false);
-            }
-        };
         fetchHistory();
-    }, []);
+    }, [dateRange]);
 
     const filteredEntries = entries.filter(e => {
         // Type filter
@@ -42,22 +52,77 @@ export default function History({ toast }) {
 
     return (
         <div className="page">
-            <h1 className="page-title">History (8h)</h1>
-
-            {/* Search Bar */}
-            <div style={{ marginBottom: 12 }}>
-                <input
-                    type="text"
-                    className="input-field"
-                    placeholder="🔍 Search by name, mobile, unit, vehicle..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    style={{
-                        fontSize: '0.95rem',
-                        padding: '12px 14px',
-                    }}
-                />
+            <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                <h1 className="page-title" style={{ margin: 0 }}>
+                    History {(dateRange.from || dateRange.to) ? '(Filtered)' : '(8h)'}
+                </h1>
+                <button 
+                    className="btn btn-outline btn-sm"
+                    onClick={fetchHistory}
+                >🔄</button>
             </div>
+
+            {/* Search Bar & Date Filter */}
+            <div style={{ marginBottom: 12, position: 'relative', display: 'flex', gap: 8 }}>
+                <div style={{ position: 'relative', flex: 1 }}>
+                    <input
+                        type="text"
+                        className="input-field"
+                        placeholder="🔍 Search by name, mobile, unit, vehicle..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        style={{
+                            fontSize: '0.95rem',
+                            padding: '12px 14px',
+                            paddingRight: 44 // space for calendar icon
+                        }}
+                    />
+                    <button
+                        onClick={() => setShowDateFilter(!showDateFilter)}
+                        style={{
+                            position: 'absolute',
+                            right: 10,
+                            top: '50%',
+                            transform: 'translateY(-50%)',
+                            background: 'none',
+                            border: 'none',
+                            fontSize: '1.2rem',
+                            cursor: 'pointer',
+                            padding: 6,
+                            opacity: (dateRange.from || dateRange.to) ? 1 : 0.6,
+                            color: (dateRange.from || dateRange.to) ? 'var(--primary)' : 'inherit'
+                        }}
+                    >
+                        📅
+                    </button>
+                </div>
+                {showDateFilter && (
+                    <DateFilterPopup 
+                        onApply={(from, to) => setDateRange({ from, to })} 
+                        onClear={() => setDateRange({ from: '', to: '' })}
+                        onClose={() => setShowDateFilter(false)} 
+                    />
+                )}
+            </div>
+
+            {/* Active Date Filter Indicator */}
+            {(dateRange.from || dateRange.to) && (
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12, fontSize: '0.85rem' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Dates:</span>
+                    <span className="badge badge-primary">
+                        {dateRange.from ? format(new Date(dateRange.from), 'MMM dd') : 'Any'} 
+                        {' → '} 
+                        {dateRange.to ? format(new Date(dateRange.to), 'MMM dd') : 'Any'}
+                    </span>
+                    <button 
+                        className="btn btn-sm" 
+                        style={{ padding: '2px 6px', fontSize: '0.75rem' }}
+                        onClick={() => setDateRange({ from: '', to: '' })}
+                    >
+                        ✕ Clear
+                    </button>
+                </div>
+            )}
 
             {/* IN/OUT Filter Buttons */}
             <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>

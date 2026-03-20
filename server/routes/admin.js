@@ -405,11 +405,12 @@ router.get('/persons', async (req, res) => {
  */
 router.put('/persons/:id', async (req, res) => {
     try {
-        const { name, unit, qr_code, qr_status } = req.body;
+        const { name, mobile, unit, qr_code, qr_status } = req.body;
 
         // Update global data
         const globalUpdate = {};
         if (name !== undefined) globalUpdate.name = name;
+        if (mobile !== undefined) globalUpdate.mobile = mobile;
         if (qr_code !== undefined) globalUpdate.qr_code = qr_code;
         if (qr_status !== undefined) globalUpdate.qr_status = qr_status;
 
