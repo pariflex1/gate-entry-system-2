@@ -130,9 +130,20 @@ router.post('/', async (req, res) => {
             let phone = null;
             if (ownerMobile) {
                 phone = `91${ownerMobile}`;
-            } else if (process.env.SUPERADMIN_WHATSAPP) {
-                // Remove formatting characters from superadmin phone number
-                phone = process.env.SUPERADMIN_WHATSAPP.replace(/\D/g, '');
+            } else {
+                // Fallback: use admin's default mobile from society settings
+                const { data: societyInfo } = await insforge.database
+                    .from('societies')
+                    .select('admin_mobile')
+                    .eq('id', req.society_id)
+                    .maybeSingle();
+
+                if (societyInfo?.admin_mobile) {
+                    phone = `91${societyInfo.admin_mobile}`;
+                } else if (process.env.SUPERADMIN_WHATSAPP) {
+                    // Last resort fallback
+                    phone = process.env.SUPERADMIN_WHATSAPP.replace(/\D/g, '');
+                }
             }
 
             if (phone) {
@@ -200,11 +211,25 @@ router.get('/inside', async (req, res) => {
             vehicles = data || [];
         }
 
+        // Fetch guard names
+        const guardIds = [...new Set(insideEntries.map(e => e.guard_id))].filter(Boolean);
+        let guards = [];
+        if (guardIds.length > 0) {
+            const { data } = await insforge.database
+                .from('guards')
+                .select('id, name')
+                .in('id', guardIds);
+            guards = data || [];
+        }
+
         const personMap = {};
         for (const p of persons) personMap[p.id] = p;
 
         const vehicleMap = {};
         for (const v of vehicles) vehicleMap[v.id] = v;
+
+        const guardMap = {};
+        for (const g of guards) guardMap[g.id] = g;
 
         const result = insideEntries.map(e => ({
             ...e,
@@ -213,6 +238,7 @@ router.get('/inside', async (req, res) => {
             person_photo_url: personMap[e.person_id]?.person_photo_url || null,
             vehicle_photo_url: e.vehicle_id ? vehicleMap[e.vehicle_id]?.vehicle_photo_url || null : null,
             vehicle_number: e.vehicle_id ? vehicleMap[e.vehicle_id]?.vehicle_number || null : null,
+            guard_name: e.guard_id ? guardMap[e.guard_id]?.name || 'Unknown Guard' : 'Unknown Guard',
         }));
 
         return res.json(result);

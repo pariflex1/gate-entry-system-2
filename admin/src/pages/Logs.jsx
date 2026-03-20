@@ -9,12 +9,13 @@ export default function Logs() {
     const [loading, setLoading] = useState(true);
     const [page, setPage] = useState(1);
     const [total, setTotal] = useState(0);
+    const [search, setSearch] = useState('');
     const limit = 30;
 
     const fetchEntries = async (p = 1) => {
         setLoading(true);
         try {
-            const res = await api.get(`/admin/logs/entries?page=${p}&limit=${limit}`);
+            const res = await api.get(`/admin/logs/entries?page=${p}&limit=${limit}&search=${encodeURIComponent(search)}`);
             setEntries(res.data.entries || []);
             setTotal(res.data.total || 0);
             setPage(p);
@@ -24,7 +25,7 @@ export default function Logs() {
     const fetchActivity = async (p = 1) => {
         setLoading(true);
         try {
-            const res = await api.get(`/admin/logs/activity?page=${p}&limit=${limit}`);
+            const res = await api.get(`/admin/logs/activity?page=${p}&limit=${limit}&search=${encodeURIComponent(search)}`);
             setActivities(res.data.activities || []);
             setTotal(res.data.total || 0);
             setPage(p);
@@ -34,7 +35,7 @@ export default function Logs() {
     useEffect(() => {
         if (tab === 'entries') fetchEntries(1);
         else fetchActivity(1);
-    }, [tab]);
+    }, [tab, search]);
 
     const totalPages = Math.ceil(total / limit);
 
@@ -98,6 +99,30 @@ export default function Logs() {
                 <button className="btn btn-outline" onClick={downloadCSV} disabled={loading}>
                     Export {tab === 'entries' ? 'Entries' : 'Activity'}
                 </button>
+            </div>
+            {/* Search */}
+            <div style={{ marginBottom: 16, position: 'relative' }}>
+                <div style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', fontSize: '1.1rem', pointerEvents: 'none' }}>🔍</div>
+                <input
+                    type="text"
+                    className="form-input"
+                    placeholder="Search by name, mobile, unit, guard..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    style={{
+                        width: '100%',
+                        paddingLeft: 42,
+                        fontSize: '1rem',
+                        padding: '14px 16px 14px 42px',
+                        border: '2px solid var(--border)',
+                        borderRadius: 10,
+                        background: 'var(--bg-card)',
+                        color: 'var(--text-primary)',
+                        transition: 'border-color 0.2s, box-shadow 0.2s',
+                    }}
+                    onFocus={(e) => { e.target.style.borderColor = 'var(--primary)'; e.target.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.15)'; }}
+                    onBlur={(e) => { e.target.style.borderColor = 'var(--border)'; e.target.style.boxShadow = 'none'; }}
+                />
             </div>
 
             {/* Tab switch */}

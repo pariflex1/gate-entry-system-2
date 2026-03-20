@@ -329,10 +329,13 @@ export default function Entry({ toast }) {
         );
     }
 
+    const guardData = JSON.parse(localStorage.getItem('guard_data') || '{}');
+    const formattedSociety = guardData.society_name || (slug ? slug.replace(/-/g, ' ') : 'New Entry');
+
     return (
         <div className="page">
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-                <h1 className="page-title" style={{ margin: 0 }}>New Entry</h1>
+                <h1 className="page-title" style={{ margin: 0, textTransform: 'capitalize' }}>{formattedSociety}</h1>
                 {pendingCount > 0 && (
                     <span style={{
                         background: '#F59E0B', color: '#000', fontSize: '0.7rem', fontWeight: 700,
@@ -375,9 +378,12 @@ export default function Entry({ toast }) {
                             }}
                             inputMode="numeric"
                             maxLength={10}
+                            style={{ paddingRight: 44 }}
                         />
-                        {searching && (
-                            <span className="spinner" style={{ position: 'absolute', right: 12, top: 14, width: 18, height: 18 }} />
+                        {searching ? (
+                            <span className="spinner" style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', width: 18, height: 18 }} />
+                        ) : (
+                            <button type="button" onClick={() => startVoice((text) => { const digits = text.replace(/\D/g, '').slice(0, 10); setMobile(digits); if (digits.length === 10) searchPerson(digits); })} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', padding: 4, opacity: 0.7 }}>🎤</button>
                         )}
                     </div>
                     {isKnown && (
@@ -389,17 +395,18 @@ export default function Entry({ toast }) {
 
                 {/* Name */}
                 <div style={{ marginBottom: 16 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <label className="input-label">Name *</label>
-                        <button type="button" onClick={() => startVoice(setName)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem' }}>🎤</button>
+                    <label className="input-label">Name *</label>
+                    <div style={{ position: 'relative' }}>
+                        <input
+                            type="text"
+                            className="input-field"
+                            placeholder="Visitor name"
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            style={{ paddingRight: 44 }}
+                        />
+                        <button type="button" onClick={() => startVoice(setName)} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', padding: 4, opacity: 0.7 }}>🎤</button>
                     </div>
-                    <input
-                        type="text"
-                        className="input-field"
-                        placeholder="Visitor name"
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                    />
                 </div>
 
                 {/* Unit */}

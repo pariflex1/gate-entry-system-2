@@ -8,6 +8,7 @@ import Units from './pages/Units';
 import Persons from './pages/Persons';
 import QRCodes from './pages/QRCodes';
 import Logs from './pages/Logs';
+import CurrentlyInside from './pages/CurrentlyInside';
 import Account from './pages/Account';
 import './index.css';
 import SocietySelector from './components/SocietySelector';
@@ -94,6 +95,7 @@ function AdminApp({ selectedSociety, onSwitchSociety }) {
           <Route path="/persons" element={<Persons />} />
           <Route path="/units" element={<Units />} />
           <Route path="/qr-codes" element={<QRCodes />} />
+          <Route path="/inside" element={<CurrentlyInside />} />
           <Route path="/logs" element={<Logs />} />
           <Route path="/account" element={<Account />} />
           <Route path="*" element={<Navigate to="/" replace />} />

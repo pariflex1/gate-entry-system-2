@@ -151,6 +151,61 @@ router.get('/account', async (req, res) => {
     }
 });
 
+/**
+ * PUT /api/admin/account
+ * Update admin name, mobile. Optionally change password.
+ * Mobile is saved to selected society as admin_mobile (default WhatsApp).
+ */
+router.put('/account', async (req, res) => {
+    try {
+        const { name, mobile, current_password, new_password } = req.body;
+
+        // If password change is requested
+        if (new_password) {
+            if (!current_password) {
+                return res.status(400).json({ error: 'Current password is required to change password' });
+            }
+            if (new_password.length < 8) {
+                return res.status(400).json({ error: 'New password must be at least 8 characters' });
+            }
+            // Verify current password by attempting sign in
+            const { data: authData, error: authErr } = await insforge.auth.signInWithPassword({
+                email: (await insforge.auth.getUser(req.headers.authorization?.split(' ')[1]))?.data?.user?.email,
+                password: current_password,
+            });
+            if (authErr) {
+                return res.status(401).json({ error: 'Current password is incorrect' });
+            }
+            // Update password
+            const { error: pwErr } = await insforge.auth.admin.updateUserById(req.admin_id, { password: new_password });
+            if (pwErr) {
+                return res.status(500).json({ error: 'Failed to update password' });
+            }
+        }
+
+        // Save name and mobile - stored per society (on societies table)
+        const societyId = req.headers['x-society-id'];
+        if (societyId) {
+            const updateData = {};
+            if (name !== undefined) updateData.admin_name = name;
+            if (mobile !== undefined) updateData.admin_mobile = mobile;
+
+            if (Object.keys(updateData).length > 0) {
+                await insforge.database
+                    .from('societies')
+                    .update(updateData)
+                    .eq('id', societyId)
+                    .eq('auth_user_id', req.admin_id);
+            }
+        }
+
+        return res.json({ name: name || '', mobile: mobile || '' });
+    } catch (error) {
+        console.error('Update account error:', error);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 // Routes below this line REQUIRE a society to be selected
 router.use(societyRequired);
 
@@ -210,6 +265,76 @@ router.get('/dashboard', async (req, res) => {
     }
 });
 
+// ============ CURRENTLY INSIDE ============
+
+/**
+ * GET /api/admin/currently-inside
+ * Returns all visitors currently inside (latest entry is IN)
+ */
+router.get('/currently-inside', async (req, res) => {
+    try {
+        const sid = req.society_id;
+
+        const { data: allEntries, error } = await insforge.database
+            .from('gate_entries')
+            .select('id, person_id, unit, purpose, vehicle_id, entry_type, entry_method, entry_time, guard_id')
+            .eq('society_id', sid)
+            .order('entry_time', { ascending: false });
+
+        if (error) {
+            return res.status(500).json({ error: 'Failed to fetch entries' });
+        }
+
+        // Compute currently inside
+        const latestByPerson = {};
+        for (const entry of (allEntries || [])) {
+            if (!latestByPerson[entry.person_id]) {
+                latestByPerson[entry.person_id] = entry;
+            }
+        }
+
+        const insideEntries = Object.values(latestByPerson).filter(e => e.entry_type === 'IN');
+
+        // Fetch person names
+        const personIds = insideEntries.map(e => e.person_id);
+        let persons = [];
+        if (personIds.length > 0) {
+            const { data } = await insforge.database
+                .from('known_persons')
+                .select('id, name, mobile, person_photo_url')
+                .in('id', personIds);
+            persons = data || [];
+        }
+        const personMap = {};
+        for (const p of persons) personMap[p.id] = p;
+
+        // Fetch guard names
+        const guardIds = [...new Set(insideEntries.map(e => e.guard_id))].filter(Boolean);
+        let guards = [];
+        if (guardIds.length > 0) {
+            const { data } = await insforge.database
+                .from('guards')
+                .select('id, name')
+                .in('id', guardIds);
+            guards = data || [];
+        }
+        const guardMap = {};
+        for (const g of guards) guardMap[g.id] = g;
+
+        const result = insideEntries.map(e => ({
+            ...e,
+            person_name: personMap[e.person_id]?.name || 'Unknown',
+            person_mobile: personMap[e.person_id]?.mobile || '',
+            guard_name: e.guard_id ? guardMap[e.guard_id]?.name || 'Unknown Guard' : 'Unknown Guard',
+        }));
+
+        return res.json(result);
+    } catch (error) {
+        console.error('Admin currently inside error:', error);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 // ============ PERSONS ============
 
 /**
@@ -226,7 +351,7 @@ router.get('/persons', async (req, res) => {
         const { data: societyLinks, error: linkError } = await insforge.database
             .from('person_society_data')
             .select('person_id, unit')
-            ;
+            .eq('society_id', req.society_id);
 
         if (linkError) {
             return res.status(500).json({ error: 'Failed to fetch persons' });
@@ -250,7 +375,7 @@ router.get('/persons', async (req, res) => {
             .range(from, to);
 
         if (search) {
-            query = query.ilike('mobile', `%${search}%`);
+            query = query.or(`name.ilike.%${search}%,mobile.ilike.%${search}%`);
         }
 
         const { data, error, count } = await query;
@@ -769,7 +894,7 @@ router.delete('/qr/:code', async (req, res) => {
  */
 router.get('/logs/entries', async (req, res) => {
     try {
-        const { person, unit, guard, type, from, to, page = 1, limit = 50 } = req.query;
+        const { person, unit, guard, type, from, to, page = 1, limit = 50, search } = req.query;
         const offset = (parseInt(page) - 1) * parseInt(limit);
 
         let query = insforge.database
@@ -817,14 +942,27 @@ router.get('/logs/entries', async (req, res) => {
         const guardMap = {};
         for (const g of guardsList) guardMap[g.id] = g;
 
-        const result = (data || []).map(e => ({
+        let result = (data || []).map(e => ({
             ...e,
             person_name: personMap[e.person_id]?.name || 'Unknown',
             person_mobile: personMap[e.person_id]?.mobile || '',
             guard_name: guardMap[e.guard_id]?.name || 'Unknown',
         }));
 
-        return res.json({ entries: result, total: count || 0, page: parseInt(page), limit: parseInt(limit) });
+        // Apply search filter across joined fields
+        if (search) {
+            const q = search.toLowerCase();
+            result = result.filter(e =>
+                (e.person_name || '').toLowerCase().includes(q) ||
+                (e.person_mobile || '').toLowerCase().includes(q) ||
+                (e.unit || '').toLowerCase().includes(q) ||
+                (e.guard_name || '').toLowerCase().includes(q) ||
+                (e.entry_type || '').toLowerCase().includes(q) ||
+                (e.purpose || '').toLowerCase().includes(q)
+            );
+        }
+
+        return res.json({ entries: result, total: search ? result.length : (count || 0), page: parseInt(page), limit: parseInt(limit) });
     } catch (error) {
         console.error('Entry logs error:', error);
         return res.status(500).json({ error: 'Internal server error' });
@@ -836,7 +974,7 @@ router.get('/logs/entries', async (req, res) => {
  */
 router.get('/logs/activity', async (req, res) => {
     try {
-        const { guard, action, from, to, page = 1, limit = 50 } = req.query;
+        const { guard, action, from, to, page = 1, limit = 50, search } = req.query;
         const offset = (parseInt(page) - 1) * parseInt(limit);
 
         let query = insforge.database
@@ -870,12 +1008,22 @@ router.get('/logs/activity', async (req, res) => {
         const guardMap = {};
         for (const g of guards) guardMap[g.id] = g;
 
-        const result = (data || []).map(e => ({
+        let result = (data || []).map(e => ({
             ...e,
             guard_name: guardMap[e.guard_id]?.name || 'Unknown',
         }));
 
-        return res.json({ activities: result, total: count || 0, page: parseInt(page), limit: parseInt(limit) });
+        // Apply search filter across joined fields
+        if (search) {
+            const q = search.toLowerCase();
+            result = result.filter(e =>
+                (e.guard_name || '').toLowerCase().includes(q) ||
+                (e.action || '').toLowerCase().includes(q) ||
+                (e.detail || '').toLowerCase().includes(q)
+            );
+        }
+
+        return res.json({ activities: result, total: search ? result.length : (count || 0), page: parseInt(page), limit: parseInt(limit) });
     } catch (error) {
         console.error('Activity logs error:', error);
         return res.status(500).json({ error: 'Internal server error' });

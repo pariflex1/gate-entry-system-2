@@ -17,12 +17,18 @@ export default function Persons() {
     const [vehicleError, setVehicleError] = useState('');
     const [vehicleSaving, setVehicleSaving] = useState(false);
 
+    // Edit person
+    const [editingPerson, setEditingPerson] = useState(null); // person id being edited
+    const [editForm, setEditForm] = useState({ name: '', mobile: '', unit: '' });
+    const [editSaving, setEditSaving] = useState(false);
+    const [editError, setEditError] = useState('');
+
     const limit = 20;
 
     const fetchPersons = async () => {
         setLoading(true);
         try {
-            const res = await api.get(`/admin/persons?search=${search}&page=${page}&limit=${limit}`);
+            const res = await api.get(`/admin/persons?search=${encodeURIComponent(search)}&page=${page}&limit=${limit}`);
             setPersons(res.data.persons || []);
             setTotal(res.data.total || 0);
         } catch {
@@ -50,12 +56,50 @@ export default function Persons() {
         if (expanded === personId) {
             setExpanded(null);
             setVehicles([]);
+            setEditingPerson(null);
         } else {
             setExpanded(personId);
             fetchVehicles(personId);
+            setEditingPerson(null);
         }
         setShowAddVehicle(false);
         setVehicleError('');
+    };
+
+    const startEditing = (p) => {
+        setEditingPerson(p.id);
+        setEditForm({ name: p.name || '', mobile: p.mobile || '', unit: p.unit || '' });
+        setEditError('');
+    };
+
+    const cancelEditing = () => {
+        setEditingPerson(null);
+        setEditForm({ name: '', mobile: '', unit: '' });
+        setEditError('');
+    };
+
+    const handleEditSave = async () => {
+        if (!editForm.name.trim()) {
+            setEditError('Name is required');
+            return;
+        }
+        setEditSaving(true);
+        setEditError('');
+        try {
+            const res = await api.put(`/admin/persons/${editingPerson}`, {
+                name: editForm.name.trim(),
+                unit: editForm.unit.trim() || null,
+            });
+            // Update local state
+            setPersons(prev => prev.map(p =>
+                p.id === editingPerson ? { ...p, name: res.data.name, unit: res.data.unit } : p
+            ));
+            setEditingPerson(null);
+        } catch (err) {
+            setEditError(err.response?.data?.error || 'Failed to update person');
+        } finally {
+            setEditSaving(false);
+        }
     };
 
     const formatVehicleNumber = (val) => {
@@ -113,7 +157,7 @@ export default function Persons() {
                 <input
                     type="text"
                     className="form-input"
-                    placeholder="Search by mobile number..."
+                    placeholder="Search by name, mobile, unit..."
                     value={search}
                     onChange={(e) => {
                         setSearch(e.target.value);
@@ -182,13 +226,69 @@ export default function Persons() {
                                 }}>▾</span>
                             </div>
 
-                            {/* Expanded: Vehicles */}
+                            {/* Expanded: Person Edit + Vehicles */}
                             {expanded === p.id && (
                                 <div style={{
                                     borderTop: '1px solid var(--border-color)',
                                     padding: '16px 20px',
                                     background: 'var(--bg-secondary)',
                                 }}>
+                                    {/* Edit Person Section */}
+                                    {editingPerson === p.id ? (
+                                        <div style={{ marginBottom: 16 }}>
+                                            <h3 style={{ fontSize: '0.9rem', fontWeight: 600, margin: '0 0 12px 0' }}>✏️ Edit Person</h3>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                                <div>
+                                                    <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Name</label>
+                                                    <input
+                                                        type="text"
+                                                        className="form-input"
+                                                        value={editForm.name}
+                                                        onChange={(e) => setEditForm(f => ({ ...f, name: e.target.value }))}
+                                                        style={{ width: '100%' }}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Mobile (read-only)</label>
+                                                    <input
+                                                        type="text"
+                                                        className="form-input"
+                                                        value={editForm.mobile}
+                                                        disabled
+                                                        style={{ width: '100%', opacity: 0.5 }}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Unit</label>
+                                                    <input
+                                                        type="text"
+                                                        className="form-input"
+                                                        value={editForm.unit}
+                                                        onChange={(e) => setEditForm(f => ({ ...f, unit: e.target.value }))}
+                                                        style={{ width: '100%' }}
+                                                    />
+                                                </div>
+                                                {editError && <p style={{ color: 'var(--danger)', fontSize: '0.8rem', margin: 0 }}>{editError}</p>}
+                                                <div style={{ display: 'flex', gap: 8 }}>
+                                                    <button className="btn btn-primary btn-sm" onClick={handleEditSave} disabled={editSaving}>
+                                                        {editSaving ? 'Saving...' : 'Save'}
+                                                    </button>
+                                                    <button className="btn btn-outline btn-sm" onClick={cancelEditing}>Cancel</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                                                <strong>{p.name}</strong> • 📱 {p.mobile} {p.unit && <span>• 🏠 {p.unit}</span>}
+                                            </div>
+                                            <button className="btn btn-outline btn-sm" onClick={(e) => { e.stopPropagation(); startEditing(p); }}>
+                                                ✏️ Edit
+                                            </button>
+                                        </div>
+                                    )}
+
+                                    {/* Vehicles Section */}
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                                         <h3 style={{ fontSize: '0.9rem', fontWeight: 600, margin: 0 }}>🚗 Vehicles</h3>
                                         <button
