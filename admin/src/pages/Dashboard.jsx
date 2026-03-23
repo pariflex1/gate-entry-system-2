@@ -147,11 +147,13 @@ export default function Dashboard({ society }) {
 
     return (
         <div>
-            <div className="page-header">
-                <h1 className="page-title">Dashboard</h1>
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                    {new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-                </p>
+            <div className="page-header" style={{ overflow: 'hidden' }}>
+                <div style={{ flex: 1 }}>
+                    <h1 className="page-title">Dashboard</h1>
+                    <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                        {new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                    </p>
+                </div>
             </div>
 
             <div className="stat-grid">
@@ -171,17 +173,17 @@ export default function Dashboard({ society }) {
             </div>
 
             {/* FULL LOGS SECTION */}
-            <div style={{ marginTop: 40 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                    <h2 style={{ fontSize: '1.2rem', fontWeight: 700, margin: 0 }}>📋 Activity Logs</h2>
+            <div style={{ marginTop: 40, overflow: 'hidden' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
+                    <h2 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0 }}>📋 Activity Logs</h2>
                     <button className="btn btn-outline btn-sm" onClick={downloadCSV} disabled={logsLoading}>
                         Export {tab === 'entries' ? 'Entries' : 'Activity'}
                     </button>
                 </div>
 
                 {/* Search & Date Filter */}
-                <div style={{ marginBottom: 16, position: 'relative', display: 'flex', gap: 8 }}>
-                    <div style={{ position: 'relative', flex: 1 }}>
+                <div style={{ marginBottom: 16, position: 'relative', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <div style={{ position: 'relative', flex: '1 1 300px' }}>
                         <div style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', fontSize: '1.1rem', pointerEvents: 'none' }}>🔍</div>
                         <input
                             type="text"
@@ -192,9 +194,9 @@ export default function Dashboard({ society }) {
                             style={{
                                 width: '100%',
                                 paddingLeft: 42,
-                                paddingRight: 42, // space for calendar icon
+                                paddingRight: 42, 
                                 fontSize: '1rem',
-                                padding: '12px 42px',
+                                padding: '10px 42px',
                                 border: '2px solid var(--border)',
                                 borderRadius: 10,
                                 background: 'var(--bg-card)',

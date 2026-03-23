@@ -100,7 +100,55 @@ router.get('/vehicles/search', async (req, res) => {
             return res.json({ found: false, vehicle: null });
         }
 
-        return res.json({ found: true, vehicle });
+        // Fetch person linked to this vehicle (take the first one if multiple)
+        const { data: link } = await insforge.database
+            .from('person_vehicle_links')
+            .select('person_id')
+            .eq('vehicle_id', vehicle.id)
+            .limit(1)
+            .maybeSingle();
+        
+        let person = null;
+        let societyData = null;
+        let otherVehicles = [];
+
+        if (link) {
+            const { data: p } = await insforge.database
+                .from('known_persons')
+                .select('*')
+                .eq('id', link.person_id)
+                .single();
+            person = p;
+            
+            // Also get society data
+            const { data: sData } = await insforge.database
+                .from('person_society_data')
+                .select('*')
+                .eq('person_id', link.person_id)
+                .eq('society_id', req.society_id)
+                .maybeSingle();
+            
+            societyData = sData;
+
+            // Get vehicles for this person
+            const { data: vLinks } = await insforge.database
+                .from('person_vehicle_links')
+                .select('vehicle_id')
+                .eq('person_id', link.person_id);
+            if (vLinks && vLinks.length > 0) {
+                const vIds = vLinks.map(l => l.vehicle_id);
+                const { data: vData } = await insforge.database
+                    .from('person_vehicles')
+                    .select('*')
+                    .in('id', vIds)
+                    .order('created_at', { ascending: false });
+                otherVehicles = vData || [];
+            }
+        }
+        
+        const personWithUnit = person ? { ...person, unit: societyData?.unit || null } : null;
+
+        return res.json({ found: true, vehicle, person: personWithUnit, vehicles: otherVehicles });
     } catch (error) {
         console.error('Vehicle search error:', error);
         return res.status(500).json({ error: 'Internal server error' });

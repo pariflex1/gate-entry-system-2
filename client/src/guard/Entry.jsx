@@ -151,6 +151,17 @@ export default function Entry({ toast }) {
             if (res.data.found) {
                 setGlobalVehicle(res.data.vehicle);
                 setSelectedVehicle(res.data.vehicle);
+                if (res.data.person) {
+                    const p = res.data.person;
+                    setMobile(p.mobile || '');
+                    setPersonId(p.id);
+                    setName(p.name || '');
+                    setUnit(p.unit || '');
+                    setVehicles(res.data.vehicles || []);
+                    setPersonPhotoUrl(p.person_photo_url || null);
+                    setIsKnown(true);
+                    toast?.success(`Found person linked to vehicle`);
+                }
             } else {
                 setGlobalVehicle(null);
             }
@@ -447,7 +458,7 @@ export default function Entry({ toast }) {
                         onChange={(e) => setPurpose(e.target.value)}
                     >
                         <option value="">Select Purpose</option>
-                        {['Meeting', 'Site Visit', 'Vendor', 'Office Visit', 'Delivery', 'Courier', 'Maintenance', 'Other'].map(p => (
+                        {['visit', 'Vendor', 'Office', 'Courier', 'Maintenance', 'Guest', 'Other'].map(p => (
                             <option key={p} value={p}>{p}</option>
                         ))}
                     </select>
@@ -509,8 +520,21 @@ export default function Entry({ toast }) {
                                     }}
                                     maxLength={13}
                                 />
-                                {searchingVehicle && (
+                                {searchingVehicle ? (
                                     <span className="spinner" style={{ position: 'absolute', right: 12, top: 14, width: 18, height: 18 }} />
+                                ) : (
+                                    <button type="button" onClick={() => startVoice((text) => {
+                                        const val = text.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+                                        let formatted = '';
+                                        for (let i = 0; i < Math.min(val.length, 10); i++) {
+                                            if (i === 2 || i === 4 || i === 6) formatted += '-';
+                                            formatted += val[i];
+                                        }
+                                        setNewVehicleNumber(formatted);
+                                        if (formatted.length === 13) {
+                                            searchGlobalVehicle(formatted);
+                                        }
+                                    })} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', padding: 4, opacity: 0.7 }}>🎤</button>
                                 )}
                             </div>
                             {globalVehicle && (

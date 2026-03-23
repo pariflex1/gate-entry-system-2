@@ -22,7 +22,8 @@ export default function DateFilterPopup({ onApply, onClear, onClose }) {
             top: '100%',
             right: 0,
             marginTop: 8,
-            background: 'var(--bg-secondary)',
+            background: 'var(--bg-card)', // Changed from var(--bg-secondary) which might be undefined/transparent
+            backgroundColor: '#ffffff', // Fallback
             border: '1px solid var(--border-color)',
             borderRadius: 12,
             padding: 16,

@@ -11,13 +11,21 @@ export default function VehicleDropdown({ personId, vehicles, societyId, onSelec
     const allVehicles = preloadedVehicles.length > 0 ? preloadedVehicles : vehicles;
     const canAddVehicle = personId !== null && personId !== undefined;
 
-    // Auto-select first vehicle when vehicles are loaded
+    const [hasInteracted, setHasInteracted] = useState(false);
+
+    // Reset interaction when person changes
     useEffect(() => {
-        if (allVehicles.length > 0 && !selectedId) {
+        setHasInteracted(false);
+        setSelectedId('');
+    }, [personId]);
+
+    // Auto-select first vehicle when vehicles are loaded initially
+    useEffect(() => {
+        if (allVehicles.length > 0 && !selectedId && !hasInteracted) {
             setSelectedId(allVehicles[0].id);
             onSelect(allVehicles[0]);
         }
-    }, [allVehicles, selectedId, onSelect]);
+    }, [allVehicles, selectedId, hasInteracted, onSelect]);
 
     // Auto-format vehicle number: uppercase + hyphens at positions 3, 6, 9
     const formatVehicleNumber = (val) => {
@@ -100,6 +108,7 @@ export default function VehicleDropdown({ personId, vehicles, societyId, onSelec
                     style={{ position: 'absolute', top: 0, left: 0, opacity: 0, height: '100%', cursor: 'pointer' }}
                     value={selectedId}
                     onChange={(e) => {
+                        setHasInteracted(true);
                         setSelectedId(e.target.value);
                         if (e.target.value === 'add_new') {
                             setShowAddNew(true);
@@ -126,7 +135,7 @@ export default function VehicleDropdown({ personId, vehicles, societyId, onSelec
 
             {showAddNew && canAddVehicle && (
                 <div style={{ marginTop: 10, display: 'flex', gap: 8, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-                    <div style={{ flex: 1, minWidth: 200 }}>
+                    <div style={{ flex: 1, minWidth: 200, position: 'relative' }}>
                         <input
                             type="text"
                             className={`input-field ${error ? 'input-error' : ''}`}
@@ -138,7 +147,17 @@ export default function VehicleDropdown({ personId, vehicles, societyId, onSelec
                             }}
                             maxLength={13}
                         />
-                        {error && <p className="error-text">{error}</p>}
+                        <button type="button" onClick={() => {
+                            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                            if (!SpeechRecognition) return;
+                            const rc = new SpeechRecognition();
+                            rc.onresult = (ev) => {
+                                setNewNumber(formatVehicleNumber(ev.results[0][0].transcript));
+                                setError('');
+                            };
+                            rc.start();
+                        }} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', padding: 4, opacity: 0.7 }}>🎤</button>
+                        {error && <p className="error-text" style={{ position: 'absolute', bottom: -24 }}>{error}</p>}
                     </div>
                     <button
                         type="button"
