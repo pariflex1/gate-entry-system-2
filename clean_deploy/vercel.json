@@ -1,0 +1,11 @@
+{
+    "outputDirectory": "dist",
+    "buildCommand": "npm run build",
+    "rewrites": [
+        { "source": "/api/(.*)", "destination": "/api/index.js" },
+        { "source": "/admin/(.*)", "destination": "/dist/admin/index.html" },
+        { "source": "/client/(.*)", "destination": "/dist/client/index.html" },
+        { "source": "/(.*)\\.(js|css|png|svg|ico|webmanifest)", "destination": "/dist/$1.$2" },
+        { "source": "/", "destination": "/dist/index.html" }
+    ]
+}

@@ -1,21 +1,24 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
   plugins: [
     react(),
+    tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico'],
       manifest: {
-        name: 'Gate Entry - Admin Portal',
-        short_name: 'Admin Portal',
-        description: 'Gate Entry & Visitor Management System — Admin Dashboard',
-        theme_color: '#2563EB',
+        name: 'Gate Entry - Guard Portal',
+        short_name: 'Guard Portal',
+        description: 'Gate Entry & Visitor Management System — Guard App',
+        theme_color: '#059669',
         background_color: '#0B1120',
         display: 'standalone',
-        start_url: '.',
+        scope: '/client/',
+        start_url: '/client/',
         icons: [
           {
             src: 'pwa-192x192.png',
@@ -53,9 +56,9 @@ export default defineConfig({
       },
     }),
   ],
-  base: '/admin/',
+  base: '/client/',
+  appType: 'spa',
   server: {
-    port: 5174,
     proxy: {
       '/api': {
         target: 'http://localhost:5000',
