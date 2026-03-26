@@ -88,6 +88,21 @@ export default function Entry({ toast }) {
 
     const handleQRScan = async (code) => {
         setShowScanner(false);
+
+        // Check if scanned code is a vehicle number plate (e.g. UP93AU1410 or UP-93-AU-1410)
+        const cleanCode = code.replace(/[\s-]/g, '').toUpperCase();
+        const vehiclePlateRegex = /^[A-Z]{2}[0-9]{2}[A-Z]{1,2}[0-9]{1,4}$/;
+
+        if (vehiclePlateRegex.test(cleanCode) && cleanCode.length === 10) {
+            // Format as XX-99-XX-9999
+            const formatted = `${cleanCode.slice(0,2)}-${cleanCode.slice(2,4)}-${cleanCode.slice(4,6)}-${cleanCode.slice(6,10)}`;
+            setNewVehicleNumber(formatted);
+            toast?.success(`Vehicle plate detected: ${formatted}`);
+            searchGlobalVehicle(formatted);
+            return;
+        }
+
+        // Otherwise treat as QR code for person lookup
         setSearching(true);
         try {
             const res = await api.get(`/persons/search-qr?code=${code}`);
@@ -404,6 +419,95 @@ export default function Entry({ toast }) {
                     )}
                 </div>
 
+                {/* Vehicle Section */}
+                <div style={{ marginBottom: 16 }}>
+                    {personId || vehicles.length > 0 ? (
+                        <VehicleDropdown
+                            personId={personId}
+                            vehicles={vehicles}
+                            onSelect={setSelectedVehicle}
+                            onVehiclesUpdate={() => {
+                                if (personId) {
+                                    api.get(`/persons/${personId}/vehicles`).then(res => setVehicles(res.data || []));
+                                }
+                            }}
+                        />
+                    ) : (
+                        <>
+                            <label className="input-label">Vehicle Number (Optional)</label>
+                            <div style={{ position: 'relative' }}>
+                                <input
+                                    type="text"
+                                    className="input-field"
+                                    placeholder="UP-93-AU-1410"
+                                    value={newVehicleNumber}
+                                    onChange={(e) => {
+                                        const raw = e.target.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+                                        let filtered = '';
+                                        for (let i = 0; i < raw.length && filtered.length < 10; i++) {
+                                            const pos = filtered.length;
+                                            const ch = raw[i];
+                                            // pos 0-1: letters, 2-3: digits, 4-5: letters, 6-9: digits
+                                            if ((pos < 2 || (pos >= 4 && pos < 6)) && /[A-Z]/.test(ch)) {
+                                                filtered += ch;
+                                            } else if (((pos >= 2 && pos < 4) || pos >= 6) && /[0-9]/.test(ch)) {
+                                                filtered += ch;
+                                            }
+                                        }
+                                        let formatted = '';
+                                        for (let i = 0; i < filtered.length; i++) {
+                                            if (i === 2 || i === 4 || i === 6) formatted += '-';
+                                            formatted += filtered[i];
+                                        }
+                                        setNewVehicleNumber(formatted);
+                                        if (formatted.length === 13) {
+                                            searchGlobalVehicle(formatted);
+                                        }
+                                    }}
+                                    onBlur={() => {
+                                        const regex = /^[A-Z]{2}-[0-9]{2}-[A-Z]{2}-[0-9]{4}$/;
+                                        if (regex.test(newVehicleNumber) && !globalVehicle) {
+                                            searchGlobalVehicle(newVehicleNumber);
+                                        }
+                                    }}
+                                    maxLength={13}
+                                />
+                                {searchingVehicle ? (
+                                    <span className="spinner" style={{ position: 'absolute', right: 12, top: 14, width: 18, height: 18 }} />
+                                ) : (
+                                    <button type="button" onClick={() => startVoice((text) => {
+                                        const raw = text.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+                                        let filtered = '';
+                                        for (let i = 0; i < raw.length && filtered.length < 10; i++) {
+                                            const pos = filtered.length;
+                                            const ch = raw[i];
+                                            if ((pos < 2 || (pos >= 4 && pos < 6)) && /[A-Z]/.test(ch)) {
+                                                filtered += ch;
+                                            } else if (((pos >= 2 && pos < 4) || pos >= 6) && /[0-9]/.test(ch)) {
+                                                filtered += ch;
+                                            }
+                                        }
+                                        let formatted = '';
+                                        for (let i = 0; i < filtered.length; i++) {
+                                            if (i === 2 || i === 4 || i === 6) formatted += '-';
+                                            formatted += filtered[i];
+                                        }
+                                        setNewVehicleNumber(formatted);
+                                        if (formatted.length === 13) {
+                                            searchGlobalVehicle(formatted);
+                                        }
+                                    })} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', padding: 4, opacity: 0.7 }}>🎤</button>
+                                )}
+                            </div>
+                            {globalVehicle && (
+                                <p style={{ color: 'var(--success-light)', fontSize: '0.8rem', marginTop: 4 }}>
+                                    ✅ Vehicle found globally - it will be linked to this entry
+                                </p>
+                            )}
+                        </>
+                    )}
+                </div>
+
                 {/* Name */}
                 <div style={{ marginBottom: 16 }}>
                     <label className="input-label">Name *</label>
@@ -458,7 +562,7 @@ export default function Entry({ toast }) {
                         onChange={(e) => setPurpose(e.target.value)}
                     >
                         <option value="">Select Purpose</option>
-                        {['visit', 'Vendor', 'Office', 'Courier', 'Maintenance', 'Guest', 'Other'].map(p => (
+                        {['Visit', 'Vendor', 'Office', 'Courier', 'Maintenance', 'Guest', 'Other'].map(p => (
                             <option key={p} value={p}>{p}</option>
                         ))}
                     </select>
@@ -476,75 +580,7 @@ export default function Entry({ toast }) {
                     )}
                 </div>
 
-                {/* Vehicle Section */}
-                <div style={{ marginBottom: 16 }}>
-                    {personId || vehicles.length > 0 ? (
-                        <VehicleDropdown
-                            personId={personId}
-                            vehicles={vehicles}
-                            onSelect={setSelectedVehicle}
-                            onVehiclesUpdate={() => {
-                                if (personId) {
-                                    api.get(`/persons/${personId}/vehicles`).then(res => setVehicles(res.data || []));
-                                }
-                            }}
-                        />
-                    ) : (
-                        <>
-                            <label className="input-label">Vehicle Number (Optional)</label>
-                            <div style={{ position: 'relative' }}>
-                                <input
-                                    type="text"
-                                    className="input-field"
-                                    placeholder="MH-12-AB-1234"
-                                    value={newVehicleNumber}
-                                    onChange={(e) => {
-                                        const val = e.target.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
-                                        let formatted = '';
-                                        for (let i = 0; i < Math.min(val.length, 10); i++) {
-                                            if (i === 2 || i === 4 || i === 6) formatted += '-';
-                                            formatted += val[i];
-                                        }
-                                        setNewVehicleNumber(formatted);
-                                        // Auto-search when full vehicle number is entered (13 chars)
-                                        if (formatted.length === 13) {
-                                            searchGlobalVehicle(formatted);
-                                        }
-                                    }}
-                                    onBlur={() => {
-                                        // Also search on blur if valid format and not already searched
-                                        const regex = /^[A-Z]{2}-[0-9]{2}-[A-Z]{2}-[0-9]{4}$/;
-                                        if (regex.test(newVehicleNumber) && !globalVehicle) {
-                                            searchGlobalVehicle(newVehicleNumber);
-                                        }
-                                    }}
-                                    maxLength={13}
-                                />
-                                {searchingVehicle ? (
-                                    <span className="spinner" style={{ position: 'absolute', right: 12, top: 14, width: 18, height: 18 }} />
-                                ) : (
-                                    <button type="button" onClick={() => startVoice((text) => {
-                                        const val = text.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
-                                        let formatted = '';
-                                        for (let i = 0; i < Math.min(val.length, 10); i++) {
-                                            if (i === 2 || i === 4 || i === 6) formatted += '-';
-                                            formatted += val[i];
-                                        }
-                                        setNewVehicleNumber(formatted);
-                                        if (formatted.length === 13) {
-                                            searchGlobalVehicle(formatted);
-                                        }
-                                    })} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', padding: 4, opacity: 0.7 }}>🎤</button>
-                                )}
-                            </div>
-                            {globalVehicle && (
-                                <p style={{ color: 'var(--success-light)', fontSize: '0.8rem', marginTop: 4 }}>
-                                    ✅ Vehicle found globally - it will be linked to this entry
-                                </p>
-                            )}
-                        </>
-                    )}
-                </div>
+
 
                 {/* Photos */}
                 <div style={{ marginBottom: 16 }}>

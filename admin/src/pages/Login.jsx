@@ -17,22 +17,6 @@ export default function Login({ onLogin }) {
     const navigate = useNavigate();
     const location = useLocation();
 
-    // Check for social login callback or existing session on mount
-    useEffect(() => {
-        const checkSession = async () => {
-            try {
-                const { data, error } = await insforge.auth.getCurrentSession();
-                if (data?.session && !localStorage.getItem('admin_token')) {
-                    handleSocialLoginCallback(data.session.accessToken);
-                }
-            } catch (err) {
-                console.error('Session check failed:', err);
-            }
-        };
-
-        checkSession();
-    }, []);
-
     const handleSocialLoginCallback = async (accessToken) => {
         setLoading(true);
         try {
@@ -58,14 +42,28 @@ export default function Login({ onLogin }) {
         }
     };
 
+    // Check for social login callback or existing session on mount
+    useEffect(() => {
+        const checkSession = async () => {
+            try {
+                const { data, error } = await insforge.auth.getCurrentSession();
+                if (data?.session && !localStorage.getItem('admin_token')) {
+                    handleSocialLoginCallback(data.session.accessToken);
+                }
+            } catch (err) {
+                console.error('Session check failed:', err);
+            }
+        };
+
+        checkSession();
+    }, []);
+
     const handleOAuthLogin = async (provider) => {
         setError('');
         try {
             const { error: authError } = await insforge.auth.signInWithOAuth({
                 provider,
-                options: {
-                    redirectTo: window.location.origin + '/admin/login'
-                }
+                redirectTo: window.location.origin + '/admin/login'
             });
             if (authError) throw authError;
         } catch (err) {
