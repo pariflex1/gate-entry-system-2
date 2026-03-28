@@ -1,4 +1,9 @@
 {
-  "project_id": "p4u6sjqt",
-  "appkey": "p4u6sjqt"
+  "project_id": "1db515f6-7d7f-4802-85a5-d48eec6c4dec",
+  "project_name": "Gate entry system",
+  "org_id": "9f331a9e-6a63-4c4b-a094-452b7bdc2938",
+  "appkey": "p4u6sjqt",
+  "region": "ap-southeast",
+  "api_key": "ik_6f7e7f212053ae398009f3b6bfca94c5",
+  "oss_host": "https://p4u6sjqt.ap-southeast.insforge.app"
 }

@@ -10,14 +10,7 @@
   ],
   "description": "Gate Entry & Visitor Management System — Multi-Tenant SaaS",
   "main": "server/index.js",
-  "scripts": {
-    "start": "node server/index.js",
-    "dev": "node --watch server/index.js",
-    "build:admin": "npm run build --prefix admin",
-    "build:client": "npm run build --prefix client",
-    "build": "npm run build:admin && npm run build:client && node scripts/postbuild.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
+  "scripts": {},
   "keywords": [],
   "author": "",
   "license": "ISC",
