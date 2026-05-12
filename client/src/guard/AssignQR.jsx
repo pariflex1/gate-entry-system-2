@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import api from '../services/api';
 
 export default function AssignQR({ toast }) {
+    const [vehicleNumber, setVehicleNumber] = useState('');
     const [mobile, setMobile] = useState('');
     const [qrCode, setQrCode] = useState('');
     const [person, setPerson] = useState(null);
@@ -11,31 +12,60 @@ export default function AssignQR({ toast }) {
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
 
-    const searchPerson = async (mobNum) => {
-        const queryMobile = mobNum || mobile;
-        if (queryMobile.length !== 10) return;
+    const formatVehicleNumber = (val) => {
+        const cleaned = val.toUpperCase().replace(/[^A-Z0-9]/g, '');
+        let formatted = '';
+        
+        for (let i = 0; i < cleaned.length; i++) {
+            if (i === 2 || i === 4 || i === 6) {
+                if (cleaned.length > i) formatted += '-';
+            }
+            formatted += cleaned[i];
+            if (formatted.length >= 13) break;
+        }
+        return formatted;
+    };
+
+    // Auto-search vehicle as user types
+    useEffect(() => {
+        const cleaned = vehicleNumber.replace(/[^A-Z0-9]/g, '');
+        if (cleaned.length >= 4) {
+            const timeout = setTimeout(() => {
+                searchVehicle(vehicleNumber);
+            }, 600); // Slightly longer debounce for better UX
+            return () => clearTimeout(timeout);
+        } else {
+            setPerson(null);
+        }
+    }, [vehicleNumber]);
+
+    const searchVehicle = async (vNum) => {
         setSearching(true);
         setError('');
         try {
-            const res = await api.get(`/persons/search?mobile=${queryMobile}`);
-            if (res.data.found) {
+            // Send both the formatted and plain version to be safe
+            const res = await api.get(`/persons/vehicles/search?vehicle_number=${vNum}`);
+            if (res.data.found && res.data.person) {
                 setPerson(res.data.person);
                 setPersonName(res.data.person.name);
+                setMobile(res.data.person.mobile || '');
                 toast?.success(`Found: ${res.data.person.name}`);
             } else {
                 setPerson(null);
-                toast?.info('New person — enter name below');
+                if (vNum.replace(/-/g, '').length >= 10) {
+                    toast?.info('New vehicle — enter details below');
+                }
             }
         } catch {
-            toast?.error('Search failed');
+            // Silently fail search during typing
         } finally {
             setSearching(false);
         }
     };
 
     const handleAssign = async () => {
-        if (!mobile || !qrCode) {
-            setError('Mobile and QR code are required');
+        if (!vehicleNumber || !qrCode) {
+            setError('Vehicle number and QR code are required');
             return;
         }
         setAssigning(true);
@@ -43,11 +73,12 @@ export default function AssignQR({ toast }) {
         setSuccess('');
         try {
             await api.post('/qr/assign', {
-                mobile,
+                vehicle_number: vehicleNumber,
+                mobile: mobile || undefined,
                 qr_code: qrCode,
                 name: personName || undefined,
             });
-            setSuccess(`QR ${qrCode} assigned to ${personName || mobile} ✅`);
+            setSuccess(`QR ${qrCode} assigned to ${personName || vehicleNumber} ✅`);
             toast?.success('QR assigned!');
         } catch (err) {
             const msg = err.response?.data?.error || 'Failed to assign QR';
@@ -73,6 +104,7 @@ export default function AssignQR({ toast }) {
     };
 
     const reset = () => {
+        setVehicleNumber('');
         setMobile('');
         setQrCode('');
         setPerson(null);
@@ -95,26 +127,17 @@ export default function AssignQR({ toast }) {
                 </div>
             ) : (
                 <div className="glass-card" style={{ padding: 24 }}>
-                    {/* Mobile */}
+                    {/* Vehicle Number */}
                     <div style={{ marginBottom: 16 }}>
-                        <label className="input-label">Mobile Number</label>
+                        <label className="input-label">Vehicle Number</label>
                         <div style={{ display: 'flex', gap: 8, position: 'relative' }}>
                             <input
-                                type="tel"
+                                type="text"
                                 className="input-field"
-                                placeholder="10-digit mobile"
-                                value={mobile}
-                                onChange={(e) => {
-                                    const val = e.target.value.replace(/\D/g, '').slice(0, 10);
-                                    setMobile(val);
-                                    if (val.length === 10) {
-                                        searchPerson(val);
-                                    } else {
-                                        setPerson(null);
-                                    }
-                                }}
-                                inputMode="numeric"
-                                style={{ flex: 1 }}
+                                placeholder="UP-93-AU-0410"
+                                value={vehicleNumber}
+                                onChange={(e) => setVehicleNumber(formatVehicleNumber(e.target.value))}
+                                style={{ flex: 1, letterSpacing: '1px', fontWeight: 600 }}
                             />
                             {searching && (
                                 <span className="spinner" style={{ position: 'absolute', right: 12, top: 14, width: 18, height: 18 }} />
@@ -127,18 +150,31 @@ export default function AssignQR({ toast }) {
                         )}
                     </div>
 
-                    {/* Name (if new person) */}
-                    {!person && mobile.length === 10 && (
-                        <div style={{ marginBottom: 16 }}>
-                            <label className="input-label">Name (new person)</label>
-                            <input
-                                type="text"
-                                className="input-field"
-                                placeholder="Person name"
-                                value={personName}
-                                onChange={(e) => setPersonName(e.target.value)}
-                            />
-                        </div>
+                    {/* Name & Mobile (if new person) */}
+                    {!person && vehicleNumber.replace(/[^A-Z0-9]/g, '').length >= 4 && (
+                        <>
+                            <div style={{ marginBottom: 16 }}>
+                                <label className="input-label">Person Name</label>
+                                <input
+                                    type="text"
+                                    className="input-field"
+                                    placeholder="Enter name"
+                                    value={personName}
+                                    onChange={(e) => setPersonName(e.target.value)}
+                                />
+                            </div>
+                            <div style={{ marginBottom: 16 }}>
+                                <label className="input-label">Mobile (Optional)</label>
+                                <input
+                                    type="tel"
+                                    className="input-field"
+                                    placeholder="10-digit mobile"
+                                    value={mobile}
+                                    onChange={(e) => setMobile(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                                    inputMode="numeric"
+                                />
+                            </div>
+                        </>
                     )}
 
                     {/* QR Code */}
@@ -159,7 +195,7 @@ export default function AssignQR({ toast }) {
                         <button
                             className="btn btn-success btn-full"
                             onClick={handleAssign}
-                            disabled={assigning || !mobile || !qrCode}
+                            disabled={assigning || !vehicleNumber || !qrCode}
                         >
                             {assigning ? <span className="spinner" style={{ width: 16, height: 16 }} /> : '✅ Assign QR'}
                         </button>

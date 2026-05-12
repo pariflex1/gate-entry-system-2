@@ -90,7 +90,7 @@ export default function Entry({ toast }) {
         setShowScanner(false);
 
         // Check if scanned code is a vehicle number plate (e.g. UP93AU1410 or UP-93-AU-1410)
-        const cleanCode = code.replace(/[\s-]/g, '').toUpperCase();
+        const cleanCode = code.replace(/[^A-Z0-9]/gi, '').toUpperCase();
         const vehiclePlateRegex = /^[A-Z]{2}[0-9]{2}[A-Z]{1,2}[0-9]{1,4}$/;
 
         if (vehiclePlateRegex.test(cleanCode) && cleanCode.length === 10) {
@@ -562,7 +562,7 @@ export default function Entry({ toast }) {
                         onChange={(e) => setPurpose(e.target.value)}
                     >
                         <option value="">Select Purpose</option>
-                        {['Visit', 'Vendor', 'Office', 'Courier', 'Maintenance', 'Guest', 'Other'].map(p => (
+                        {['Visit', 'Vendor', 'Office', 'Courier', 'Maintenance', 'Guest', 'Maid', 'Staff', 'Other'].map(p => (
                             <option key={p} value={p}>{p}</option>
                         ))}
                     </select>

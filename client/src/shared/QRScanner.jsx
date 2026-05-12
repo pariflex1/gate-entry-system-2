@@ -2,17 +2,17 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import { createWorker } from 'tesseract.js';
 
-// Regex to find Indian vehicle plate patterns (e.g. UP93AU1410, MH12AB1234)
-const PLATE_REGEX = /[A-Z]{2}\s*[\-]?\s*[0-9]{1,2}\s*[\-]?\s*[A-Z]{1,2}\s*[\-]?\s*[0-9]{1,4}/gi;
+// Regex to find Indian vehicle plate patterns (e.g. UP93AU1410, MH12AB1234), allowing for OCR noise
+const PLATE_REGEX = /[A-Z]{2}[^A-Z0-9]*[0-9]{1,2}[^A-Z0-9]*[A-Z]{1,2}[^A-Z0-9]*[0-9]{1,4}/gi;
 
 function extractVehiclePlate(text) {
     const matches = text.match(PLATE_REGEX);
     if (!matches) return null;
 
     for (const match of matches) {
-        // Strip spaces, hyphens → normalize
-        const raw = match.replace(/[\s\-]/g, '').toUpperCase();
-        // Must be exactly 10 alphanumeric chars: 2 letters, 2 digits, 2 letters, 4 digits
+        // Strip everything except letters and numbers
+        const raw = match.replace(/[^A-Z0-9]/gi, '').toUpperCase();
+        // Must be exactly 10 alphanumeric chars: 2 letters, 2 digits, 2 letters, 4 digits (or similar formats)
         if (raw.length >= 8 && raw.length <= 10) {
             const strict = /^[A-Z]{2}[0-9]{2}[A-Z]{1,2}[0-9]{1,4}$/.test(raw);
             if (strict && raw.length === 10) {

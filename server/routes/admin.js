@@ -335,6 +335,107 @@ router.get('/currently-inside', async (req, res) => {
     }
 });
 
+// ============ STAFF ENTRIES ============
+
+/**
+ * GET /api/admin/staff-entries
+ * Returns staff (Maid/Staff) entries aggregated by person and calculates total stay hours for today
+ */
+router.get('/staff-entries', async (req, res) => {
+    try {
+        const sid = req.society_id;
+        
+        // Fetch all entries for Maid and Staff
+        const { data: entries, error } = await insforge.database
+            .from('gate_entries')
+            .select('id, person_id, unit, purpose, vehicle_id, entry_type, entry_method, entry_time, guard_id')
+            .eq('society_id', sid)
+            .in('purpose', ['Maid', 'Staff'])
+            .order('entry_time', { ascending: false });
+            
+        if (error) {
+            return res.status(500).json({ error: 'Failed to fetch staff entries' });
+        }
+        
+        const personIds = [...new Set((entries || []).map(e => e.person_id))];
+        let persons = [];
+        if (personIds.length > 0) {
+            const { data } = await insforge.database
+                .from('known_persons')
+                .select('id, name, mobile')
+                .in('id', personIds);
+            persons = data || [];
+        }
+        const personMap = {};
+        for(const p of persons) personMap[p.id] = p;
+
+        const todayStart = new Date();
+        todayStart.setHours(0,0,0,0);
+        
+        const staffList = {};
+        for(const e of (entries || [])) {
+            const pid = e.person_id;
+            if(!staffList[pid]) {
+                staffList[pid] = {
+                    person_id: pid,
+                    person_name: personMap[pid]?.name || 'Unknown',
+                    person_mobile: personMap[pid]?.mobile || '—',
+                    unit: e.unit || '—',
+                    purpose: e.purpose || '—',
+                    status: 'OUT',
+                    last_in: null,
+                    entries: []
+                };
+            }
+            staffList[pid].entries.push(e);
+        }
+        
+        // Calculate total hours exactly for today
+        for(const pid in staffList) {
+            const staff = staffList[pid];
+            // Sort ascending for chronological calculation
+            staff.entries.sort((a,b) => new Date(a.entry_time) - new Date(b.entry_time));
+            
+            let lastInTime = null;
+            let totalMsToday = 0;
+            
+            for(const e of staff.entries) {
+                const eTime = new Date(e.entry_time);
+                if (e.entry_type === 'IN') {
+                    lastInTime = eTime;
+                    staff.status = 'IN';
+                    staff.last_in = e.entry_time;
+                } else if (e.entry_type === 'OUT' && lastInTime) {
+                    staff.status = 'OUT';
+                    let inTime = lastInTime;
+                    if(eTime > todayStart) {
+                         if(inTime < todayStart) inTime = todayStart;
+                         totalMsToday += (eTime - inTime);
+                    }
+                    lastInTime = null;
+                }
+            }
+            
+            if (staff.status === 'IN' && lastInTime) {
+                let inTime = lastInTime;
+                const now = new Date();
+                if(now > todayStart) {
+                     if(inTime < todayStart) inTime = todayStart;
+                     totalMsToday += (now - inTime);
+                }
+            }
+            
+            staff.total_hours_today = (totalMsToday / (1000 * 60 * 60)).toFixed(2);
+            delete staff.entries;
+        }
+
+        return res.json(Object.values(staffList));
+    } catch(err) {
+        console.error('Staff entries error:', err);
+        return res.status(500).json({error: 'Internal server error'});
+    }
+});
+
 // ============ PERSONS ============
 
 /**

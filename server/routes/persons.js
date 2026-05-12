@@ -83,12 +83,15 @@ router.get('/vehicles/search', async (req, res) => {
             return res.status(400).json({ error: 'vehicle_number query parameter is required' });
         }
 
-        const normalizedNumber = vehicle_number.toUpperCase().replace(/[^A-Z0-9-]/g, '');
+        const vNum = vehicle_number.toUpperCase();
+        const cleaned = vNum.replace(/[^A-Z0-9]/g, '');
+        const formatted = vNum.replace(/[^A-Z0-9-]/g, '');
 
+        // Search for both the cleaned and formatted versions
         const { data: vehicle, error } = await insforge.database
             .from('person_vehicles')
             .select('*')
-            .eq('vehicle_number', normalizedNumber)
+            .or(`vehicle_number.eq.${cleaned},vehicle_number.eq.${formatted}`)
             .maybeSingle();
 
         if (error) {
